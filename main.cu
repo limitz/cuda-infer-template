@@ -71,6 +71,24 @@ void f_normalize(float* normalized, uint8_t* rgb, size_t width, size_t height)
 	normalized[soffset + 1 * scstride] = (rgb[offset + 1 * cstride]/255.0f - 0.456f) / 0.224f; 
 	normalized[soffset + 2 * scstride] = (rgb[offset + 2 * cstride]/255.0f - 0.406f) / 0.225f; 
 }
+__global__
+void f_segment(float4* out, int pitch_out, int* seg, int width, int height)
+{
+	int x = (blockIdx.x * blockDim.x + threadIdx.x);
+	int y = (blockIdx.y * blockDim.y + threadIdx.y);
+	if (x >= width || y >= height) return;
+
+	float alpha = 0.4;
+	int classification = seg[(y/SCALE) * (width/SCALE) + (x/SCALE)];
+	float4 color = classification ? make_float4(
+			alpha/2 + alpha/2 * __sinf((classification/20.0f+0.00f) * 2 * M_PI),
+			alpha/2 + alpha/2 * __sinf((classification/20.0f+0.33f) * 2 * M_PI),
+			alpha/2 + alpha/2 * __sinf((classification/20.0f+0.66f) * 2 * M_PI),
+			alpha) : make_float4(0,0,0,0);
+
+	int idx = y * pitch_out/sizeof(float4) + x;
+	out[idx] = out[idx] * (1-color.w) + color;
+}
 
 int smToCores(int major, int minor)
 {
@@ -255,7 +273,7 @@ int main(int /*argc*/, char** /*argv*/)
 		CudaDisplay display(TITLE, WIDTH, HEIGHT); 
 		cudaDeviceSynchronize();
 
-		const char* jpegPath = "cat.jpg";
+		const char* jpegPath = "sheep.jpg";
 		printf("Loading \"%s\"\n", jpegPath);
 		loadJpeg(jpegPath, stream);
 		cudaDeviceSynchronize();
@@ -290,6 +308,16 @@ int main(int /*argc*/, char** /*argv*/)
 				display.CUDA.frame.data,
 				display.CUDA.frame.pitch,
 				imageBuffer,
+				display.CUDA.frame.width,
+				display.CUDA.frame.height
+			);
+			
+			model.infer(stream);
+
+			f_segment<<<gridSize, blockSize, 0, stream>>>(
+				display.CUDA.frame.data,
+				display.CUDA.frame.pitch,
+				(int*)model.outputFrame.data,
 				display.CUDA.frame.width,
 				display.CUDA.frame.height
 			);

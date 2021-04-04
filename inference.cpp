@@ -66,7 +66,7 @@ void Model::setup()
 	if (idx.input < 0) throw "Unable to find model input";
 	if (DataType::kFLOAT != _engine->getBindingDataType(idx.input)) 
 		throw "Unexpected datatype for input";
-	dim.input = Dims4(1,3, WIDTH/SCALE, HEIGHT/SCALE);
+	dim.input = Dims4(1,3, HEIGHT/SCALE, WIDTH/SCALE);
 	_context->setBindingDimensions(idx.input, dim.input);
 
 	printf("Setting up model output\n");
