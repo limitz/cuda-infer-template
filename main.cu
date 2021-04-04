@@ -19,11 +19,11 @@
 #endif
 
 #ifndef WIDTH
-#define WIDTH 960
+#define WIDTH 1920
 #endif
 
 #ifndef HEIGHT
-#define HEIGHT 540
+#define HEIGHT 1080
 #endif
 
 static uint8_t* imageBuffer = {0};
@@ -63,10 +63,13 @@ void f_normalize(float* normalized, uint8_t* rgb, size_t width, size_t height)
 	int y = (blockIdx.y * blockDim.y + threadIdx.y);
 	if (x >= width || y >= height) return;
 	size_t cstride = width * height;
+	size_t scstride = (width/SCALE) * (height/SCALE);
 	size_t offset = y * width + x;
-	normalized[offset + 0 * cstride] = (rgb[offset + 0 * cstride]/255.0f - 0.485f) / 0.229f; 
-	normalized[offset + 1 * cstride] = (rgb[offset + 1 * cstride]/255.0f - 0.456f) / 0.224f; 
-	normalized[offset + 2 * cstride] = (rgb[offset + 2 * cstride]/255.0f - 0.406f) / 0.225f; 
+	size_t soffset = (y / SCALE) * (width/SCALE) + x / SCALE;
+
+	normalized[soffset + 0 * scstride] = (rgb[offset + 0 * cstride]/255.0f - 0.485f) / 0.229f; 
+	normalized[soffset + 1 * scstride] = (rgb[offset + 1 * cstride]/255.0f - 0.456f) / 0.224f; 
+	normalized[soffset + 2 * scstride] = (rgb[offset + 2 * cstride]/255.0f - 0.406f) / 0.225f; 
 }
 
 int smToCores(int major, int minor)
@@ -257,7 +260,7 @@ int main(int /*argc*/, char** /*argv*/)
 		loadJpeg(jpegPath, stream);
 		cudaDeviceSynchronize();
 	
-		const char* modelPath = "/home/limitz/resnet101-fcn-960x540.engine";
+		const char* modelPath = "/home/limitz/resnet101-fcn-480x270.engine";
 		printf("Loading \"%s\"", modelPath);
 		Model model(modelPath);
 

@@ -1,5 +1,17 @@
 #pragma once
 
+#ifndef WIDTH
+#define WIDTH 1920
+#endif
+
+#ifndef HEIGHT
+#define HEIGHT 1080
+#endif
+
+#ifndef SCALE
+#define SCALE 4
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
