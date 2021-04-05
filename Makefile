@@ -15,7 +15,7 @@ CUDA_LIB_DIR = /usr/local/cuda-11.0/lib64
 
 SRC_DIR = .
 INC_DIR = .
-BIN_DIR = bin
+BIN_DIR = .
 OBJ_DIR = obj
 BIN_PATH = $(BIN_DIR)/$(TARGET)
 
@@ -48,10 +48,8 @@ GENCODE_FLAGS += -gencode arch=compute_$(HIGHEST_SM),code=compute_$(HIGHEST_SM)
 SOURCES  := $(wildcard $(SRC_DIR)/*.c*)
 INCLUDES := $(wildcard $(INC_DIR)/*.h) $(wildcard $(SRC_DIR)/*.h)
 OBJECTS  := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(patsubst $(SRC_DIR)/%.cu, $(OBJ_DIR)/%.o, $(SOURCES)))
-SHADER_SOURCES  := $(wildcard $(SRC_DIR)/*.glsl)
-SHADERS := $(patsubst $(SRC_DIR)/%.glsl, $(BIN_DIR)/%.glsl, $(SHADER_SOURCES))
 
-all: $(BIN_PATH) $(SHADERS)
+all: $(BIN_PATH)
 
 $(BIN_DIR)/libdepthengine.so: $(BIN_DIR)
 	$(CP) $(K4A_LIB_DIR)/libdepthengine.so $(BIN_DIR)/
@@ -68,12 +66,8 @@ $(OBJ_DIR)/%.o: $(SRC_DIR)/%.cu $(INCLUDES) $(OBJ_DIR)
 $(BIN_PATH): $(OBJECTS) $(BIN_DIR)
 	$(NVCC) $(NVLDFLAGS) -o $@ $(OBJECTS) $(GENCODE_FLAGS)
 
-$(BIN_DIR)/%.glsl: $(SRC_DIR)/%.glsl
-	$(CP) $< $@
-
 clean:
 	$(RMDIR) $(OBJ_DIR)
-	$(RMDIR) $(BIN_DIR)
 
 $(OBJ_DIR):
 	$(MKDIR) -p $(OBJ_DIR)

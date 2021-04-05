@@ -18,16 +18,9 @@
 #define TITLE "CUDA INFERENCE DEMO"
 #endif
 
-#ifndef WIDTH
-#define WIDTH 1920
-#endif
-
-#ifndef HEIGHT
-#define HEIGHT 1080
-#endif
+//width and height defines come from inference.h at the moment
 
 static uint8_t* imageBuffer = {0};
-//static float*   imageBufferNormalized = {0};
 
 __global__
 void f_test(float4* out, int pitch_out, int width, int height)
@@ -67,9 +60,9 @@ void f_normalize(float* normalized, uint8_t* rgb, size_t width, size_t height)
 	size_t offset = y * width + x;
 	size_t soffset = (y / SCALE) * (width/SCALE) + x / SCALE;
 
-	normalized[soffset + 0 * scstride] = (rgb[offset + 0 * cstride]/255.0f - 0.485f) / 0.229f; 
-	normalized[soffset + 1 * scstride] = (rgb[offset + 1 * cstride]/255.0f - 0.456f) / 0.224f; 
-	normalized[soffset + 2 * scstride] = (rgb[offset + 2 * cstride]/255.0f - 0.406f) / 0.225f; 
+	normalized[soffset + 0 * scstride] = (rgb[offset + 0 * cstride]/255.0f - 0.485f) / (0.229f); 
+	normalized[soffset + 1 * scstride] = (rgb[offset + 1 * cstride]/255.0f - 0.456f) / (0.224f); 
+	normalized[soffset + 2 * scstride] = (rgb[offset + 2 * cstride]/255.0f - 0.406f) / (0.225f); 
 }
 __global__
 void f_segment(float4* out, int pitch_out, int* seg, int width, int height)
@@ -278,7 +271,8 @@ int main(int /*argc*/, char** /*argv*/)
 		loadJpeg(jpegPath, stream);
 		cudaDeviceSynchronize();
 	
-		const char* modelPath = "/home/limitz/resnet101-fcn-480x270.engine";
+		// copy to output folder
+		const char* modelPath = "models/fcn_resnet101.960x540.engine";
 		printf("Loading \"%s\"", modelPath);
 		Model model(modelPath);
 
