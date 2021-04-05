@@ -14,6 +14,8 @@
 #include <inference.h>
 #include <operators.h>
 
+#include <asyncwork.h>
+
 #ifndef TITLE
 #define TITLE "CUDA INFERENCE DEMO"
 #endif
@@ -262,9 +264,6 @@ int main(int /*argc*/, char** /*argv*/)
 		rc = cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
 		if (cudaSuccess != rc) throw "Unable to create CUDA stream";
 
-		printf("Creating screen\n");
-		CudaDisplay display(TITLE, WIDTH, HEIGHT); 
-		cudaDeviceSynchronize();
 
 		const char* jpegPath = "sheep.jpg";
 		printf("Loading \"%s\"\n", jpegPath);
@@ -276,6 +275,10 @@ int main(int /*argc*/, char** /*argv*/)
 		printf("Loading \"%s\"", modelPath);
 		Model model(modelPath);
 
+		printf("Creating screen\n");
+		CudaDisplay display(TITLE, WIDTH, HEIGHT); 
+		cudaDeviceSynchronize();
+		
 		dim3 blockSize = { 16, 16 };
 		dim3 gridSize = { 
 			(WIDTH  + blockSize.x - 1) / blockSize.x, 
