@@ -109,6 +109,9 @@ int smToCores(int major, int minor)
 		case 0x72:
 		case 0x75:
 			return 64;
+		case 0x80:
+		case 0x86:
+			return 64;
 		default:
 			return 0;
 	};
