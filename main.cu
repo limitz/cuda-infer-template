@@ -259,11 +259,11 @@ int main(int /*argc*/, char** /*argv*/)
 	int rc;
 	cudaStream_t stream = 0;
 
-	printf("Selecting the best GPU\n");
-	selectGPU();
-
 	try 
 	{
+		printf("Selecting the best GPU\n");
+		selectGPU();
+		
 		rc = cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
 		if (cudaSuccess != rc) throw "Unable to create CUDA stream";
 
