@@ -1,3 +1,62 @@
+# CUDA Inference Template
+A clean starter project for running image classification through CNN inference on CUDA, using [TensorRT](https://developer.nvidia.com/tensorrt).
+
+
+## Usage
+Compile for your platform after cloning this repo:
+``` sh
+git clone https://github.com/limitz/cuda-infer-template/
+cd cuda-infer-template
 make
-./models/generate.py
+```
+
+Generate intermediary `ONNX` network, and derive the `TensorRT` engine from that:
+``` sh
+sudo chmod +x ./models/generate.py
+cd models && ./generate.py; cd -
+```
+
+Run the end result to see the classification in action:
+``` sh
 ./program
+```
+
+
+## Installation and Requirements
+### Nvidia Jetson
+TensorRT is included with the [latest JetPack releases](https://developer.nvidia.com/embedded/jetpack).
+However, the code in this repo has a CUDA `11+` dependency (through `nvjpeg.h`), and the Jetson platform is currently not compatible yet, partly because of it's Ubuntu 18.04 limit and GPU limits tied to that. See [this forum post](https://forums.developer.nvidia.com/t/installing-cuda-11-x-on-jetson-nano/169109/3) for more information on this topic.
+
+### Ubuntu
+Install TensorRT through [Nvidia's instructions](https://docs.nvidia.com/deeplearning/tensorrt/install-guide/index.html).
+Make sure to export `CUDA_BIN_PATH` for easy access to `nvcc` and other tools.
+
+### Arch
+TensorRT is only compatible with dependency CUDA `11.0` and `11.1`. The default CUDA version in Pacman is `11.2`. Make sure this version is not installed to prevent conflicts and install the previous version through AUR:
+
+```sh
+pamac install cuda11.1
+```
+Export bin path to CUDA tools (preferably from `.profile` or similar):
+```sh
+export CUDA_BIN_PATH=/opt/cuda/bin
+```
+
+Download the correct `tar.gz` archive from [the TensorRT download page](https://developer.nvidia.com/nvidia-tensorrt-download). You will need an Nvidia Developers account.
+At the time of writing you need the `7.2.3.4` version with CUDA `11.1`. 
+The exact filename is mentioned in the `TensorRT` AUR package's `PKGBUILD` file.
+
+Create build dir for TensorRT AUR package:
+```sh
+cd /tmp
+git clone https://aur.archlinux.org/tensorrt.git
+cd tensorrt
+```
+Now move the downloaded TensorRT `.tar.gz` into this folder:
+```sh
+mv ~/my-downloads/TensorRT-7.2.3.4.Ubuntu-18.04.x86_64-gnu.cuda-11.1.cudnn8.1.tar.gz .
+```
+Compile the AUR package:
+``` sh
+makepkg -si
+```
