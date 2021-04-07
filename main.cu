@@ -237,57 +237,7 @@ void loadJpeg(const char* path, cudaStream_t stream)
 		}
 		read += r;
 	}
-#if !USE_NVJPEG
-	struct jpeg_decompress_struct cinfo;
-	struct jpeg_error_mgr jerr;
-	cinfo.err = jpeg_std_error(&jerr);
-
-	jpeg_create_decompress(&cinfo);
-
-	printf("Setting memsrcc %d\n", read);
-	fflush(stdout);
-
-	jpeg_mem_src(&cinfo, data, read);
-	
-	printf("Reading header\n");
-	fflush(stdout);
-	jpeg_read_header(&cinfo, 1);
-	
-	printf("Setting calc dims\n");
-	fflush(stdout);
-	jpeg_calc_output_dimensions(&cinfo);
-
-	
-	printf( "Loading jpeg image, size=%d.\n"
-		" - width: %d\n"
-		" - height: %d\n"
-		" - components: %d\n",
-		read, cinfo.output_width, cinfo.output_height, cinfo.output_components);
-
-	rc = cudaMalloc(&imageBuffer, cinfo.output_width * cinfo.output_height * cinfo.output_components);
-	if (cudaSuccess != rc) throw "Unable to allocate image buffer on device";
-
-	uint8_t* buffer = (uint8_t*)malloc(cinfo.output_height * cinfo.output_width * cinfo.output_components);
-	JSAMPARRAY scanlines = (JSAMPARRAY) malloc(sizeof(JSAMPROW) * cinfo.output_height);
-	
-	for (JDIMENSION i=0; i<cinfo.output_height; i++)
-	{
-		scanlines[i] = (JSAMPROW) buffer + i * cinfo.output_width * cinfo.output_components;
-	}
-
-	jpeg_start_decompress(&cinfo);
-	while (cinfo.output_scanline < cinfo.output_height)
-	{
-		jpeg_read_scanlines(&cinfo, scanlines + cinfo.output_scanline, cinfo.output_height - cinfo.output_scanline);
-	}
-	jpeg_finish_decompress(&cinfo);
-	jpeg_destroy_decompress(&cinfo);
-
-	cudaMemcpyAsync(imageBuffer, buffer, cinfo.output_width * cinfo.output_height * cinfo.output_components, cudaMemcpyHostToDevice, stream);
-
-	free(buffer);
-	free(scanlines);
-#else
+#if USE_NVJPEG
 	nvjpegHandle_t handle;
 	rc = nvjpegCreateEx(NVJPEG_BACKEND_DEFAULT, NULL, NULL, 0, &handle);
 	if (cudaSuccess != rc) throw "Unable to create jpeg backend";
@@ -339,6 +289,44 @@ void loadJpeg(const char* path, cudaStream_t stream)
 	cudaStreamSynchronize(stream);
 	rc = cudaGetLastError();
 	if (cudaSuccess != rc) throw "Unable to destroy jpeg resources";
+#else
+	struct jpeg_decompress_struct cinfo;
+	struct jpeg_error_mgr jerr;
+	cinfo.err = jpeg_std_error(&jerr);
+
+	jpeg_create_decompress(&cinfo);
+	jpeg_mem_src(&cinfo, data, read);
+	jpeg_read_header(&cinfo, 1);
+	jpeg_calc_output_dimensions(&cinfo);
+	
+	printf( "Loading jpeg image, size=%d.\n"
+		" - width: %d\n"
+		" - height: %d\n"
+		" - components: %d\n",
+		read, cinfo.output_width, cinfo.output_height, cinfo.output_components);
+
+	rc = cudaMalloc(&imageBuffer, cinfo.output_width * cinfo.output_height * cinfo.output_components);
+	if (cudaSuccess != rc) throw "Unable to allocate image buffer on device";
+
+	uint8_t* buffer = (uint8_t*)malloc(cinfo.output_height * cinfo.output_width * cinfo.output_components);
+	JSAMPARRAY scanlines = (JSAMPARRAY) malloc(sizeof(JSAMPROW) * cinfo.output_height);
+	for (JDIMENSION i=0; i<cinfo.output_height; i++)
+	{
+		scanlines[i] = (JSAMPROW) buffer + i * cinfo.output_width * cinfo.output_components;
+	}
+
+	jpeg_start_decompress(&cinfo);
+	while (cinfo.output_scanline < cinfo.output_height)
+	{
+		jpeg_read_scanlines(&cinfo, scanlines + cinfo.output_scanline, cinfo.output_height - cinfo.output_scanline);
+	}
+	jpeg_finish_decompress(&cinfo);
+	jpeg_destroy_decompress(&cinfo);
+
+	cudaMemcpyAsync(imageBuffer, buffer, cinfo.output_width * cinfo.output_height * cinfo.output_components, cudaMemcpyHostToDevice, stream);
+
+	free(buffer);
+	free(scanlines);
 #endif
 }
 
