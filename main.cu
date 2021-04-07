@@ -6,8 +6,11 @@
 #include <unistd.h>
 #include <math.h>
 #include <sys/stat.h>
-#include <jpeglib.h>
+#if USE_NVJPEG
 #include <nvjpeg.h>
+#else
+#include <jpeglib.h>
+#endif
 
 #include <display.h>
 #include <pthread.h>
@@ -299,12 +302,6 @@ void loadJpeg(const char* path, cudaStream_t stream)
 	jpeg_read_header(&cinfo, 1);
 	jpeg_calc_output_dimensions(&cinfo);
 	
-	printf( "Loading jpeg image, size=%d.\n"
-		" - width: %d\n"
-		" - height: %d\n"
-		" - components: %d\n",
-		read, cinfo.output_width, cinfo.output_height, cinfo.output_components);
-
 	rc = cudaMalloc(&imageBuffer, cinfo.output_width * cinfo.output_height * cinfo.output_components);
 	if (cudaSuccess != rc) throw "Unable to allocate image buffer on device";
 

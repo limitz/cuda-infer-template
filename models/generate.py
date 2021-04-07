@@ -1,4 +1,4 @@
-#!/bin/python3
+#!/usr/bin/python3
 # Copyright (c) 2021, NVIDIA CORPORATION. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -54,6 +54,6 @@ torch.onnx.export(model, input_tensor, onnx_name,
 
 
 os.system(
-        "trtexec --onnx={onnx} --saveEngine={engine} --optShapes=1x3x{height}x{width} --workspace=2048 --best"
+        "trtexec --onnx={onnx} --saveEngine={engine} --optShapes=1x3x{height}x{width} --workspace=1024 --best"
         .format(onnx = onnx_name, engine = engine_name, width = model_width, height = model_height)
 );
