@@ -24,8 +24,25 @@ Run the end result to see the classification in action:
 
 ## Installation and Requirements
 ### Nvidia Jetson
+
 TensorRT is included with the [latest JetPack releases](https://developer.nvidia.com/embedded/jetpack).
-However, the code in this repo has a CUDA `11+` dependency (through `nvjpeg.h`), and the Jetson platform is currently not compatible yet, partly because of it's Ubuntu 18.04 limit and GPU limits tied to that. See [this forum post](https://forums.developer.nvidia.com/t/installing-cuda-11-x-on-jetson-nano/169109/3) for more information on this topic.
+
+In order to create the model it might be needed to create a BIG swapfile. (Building the engine seems to require at least 12 GB of RAM, adjust your swapfile size according to the amount of RAM your jetson has)
+``` sh
+sudo fallocate -l 12G /mnt/swapfile
+sudo chmod 600 /mnt/swapfile
+sudo mkswap /mnt/swapfile
+sudo swapon /mnt/swapfile
+```
+
+To make the swapfile persistent across reboots add the following line to `/etc/fstab`
+```
+/mnt/swapfile swap swap defaults 0 0
+```
+
+__Nvidia Jetson and NVJPEG__
+
+nvjpeg is not supported (yet) on the Jetson platform, partly because of it's Ubuntu 18.04 limit and GPU limits tied to that. See [this forum post](https://forums.developer.nvidia.com/t/installing-cuda-11-x-on-jetson-nano/169109/3) for more information on this topic. For jetson the libjpeg library is used, which can be substituted by jpeg-turbo if more performance is needed.
 
 ### Ubuntu
 Install TensorRT through [Nvidia's instructions](https://docs.nvidia.com/deeplearning/tensorrt/install-guide/index.html).
