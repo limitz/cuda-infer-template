@@ -15,7 +15,7 @@ AsyncWorkQueue::AsyncWorkQueue(size_t threads, size_t capacity)
 	_active = true;
 	pthread_mutex_init(&_lock, NULL);
 
-	for (int i=0; i<threads; i++)
+	for (size_t i=0; i<threads; i++)
 	{
 		pthread_create(_threads + i, NULL, AsyncWorkQueue::consumerProc, this);
 	}
@@ -108,4 +108,5 @@ void* AsyncWorkQueue::consumerProc(void* param)
 			default: break;
 		}
 	}
+	return nullptr;
 }
