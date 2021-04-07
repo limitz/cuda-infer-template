@@ -1,23 +1,27 @@
 #include <cuda_runtime.h>
-#include <nvjpeg.h>
-#include <math.h>
 
-#include <stdlib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 #include <unistd.h>
+#include <math.h>
+#include <sys/stat.h>
+#include <jpeglib.h>
+#include <nvjpeg.h>
 
 #include <display.h>
 #include <pthread.h>
 #include <math.h>
 #include <inference.h>
 #include <operators.h>
-
 #include <asyncwork.h>
 
 #ifndef TITLE
 #define TITLE "CUDA INFERENCE DEMO"
+#endif
+
+#ifndef USE_NVJPEG
+#define USE_NVJPEG 0
 #endif
 
 //width and height defines come from inference.h at the moment
@@ -37,6 +41,8 @@ void f_test(float4* out, int pitch_out, int width, int height)
 			0, 1);
 }
 
+#if USE_NVJPEG
+// RGB in separate channels (preferable as input to model)
 __global__
 void f_jpeg(float4* out, int pitch_out, uint8_t* rgb, int width, int height)
 {
@@ -66,6 +72,37 @@ void f_normalize(float* normalized, uint8_t* rgb, size_t width, size_t height)
 	normalized[soffset + 1 * scstride] = (rgb[offset + 1 * cstride]/255.0f - 0.456f) / (0.224f); 
 	normalized[soffset + 2 * scstride] = (rgb[offset + 2 * cstride]/255.0f - 0.406f) / (0.225f); 
 }
+#else
+// RGB interleaved as 3 byte tupels
+__global__
+void f_jpeg(float4* out, int pitch_out, uint8_t* rgb, int width, int height)
+{
+	int x = (blockIdx.x * blockDim.x + threadIdx.x);
+	int y = (blockIdx.y * blockDim.y + threadIdx.y);
+	if (x >= width || y >= height) return;
+
+	out[y * pitch_out / sizeof(float4) + x] = make_float4(
+			rgb[0 + y * width * 3 + x * 3] / 255.0f,
+			rgb[1 + y * width * 3 + x * 3] / 255.0f,
+			rgb[2 + y * width * 3 + x * 3] / 255.0f,
+			1);
+}
+__global__
+void f_normalize(float* normalized, uint8_t* rgb, size_t width, size_t height)
+{
+	int x = (blockIdx.x * blockDim.x + threadIdx.x);
+	int y = (blockIdx.y * blockDim.y + threadIdx.y);
+	if (x >= width || y >= height) return;
+	size_t scstride = (width/SCALE) * (height/SCALE);
+	size_t offset = y * width + x;
+	size_t soffset = (y / SCALE) * (width/SCALE) + x / SCALE;
+
+	normalized[soffset + 0 * scstride] = (rgb[offset*3 + 0]/255.0f - 0.485f) / (0.229f); 
+	normalized[soffset + 1 * scstride] = (rgb[offset*3 + 1]/255.0f - 0.456f) / (0.224f); 
+	normalized[soffset + 2 * scstride] = (rgb[offset*3 + 2]/255.0f - 0.406f) / (0.225f); 
+}
+#endif
+
 __global__
 void f_segment(float4* out, int pitch_out, int* seg, int width, int height)
 {
@@ -200,7 +237,57 @@ void loadJpeg(const char* path, cudaStream_t stream)
 		}
 		read += r;
 	}
+#if !USE_NVJPEG
+	struct jpeg_decompress_struct cinfo;
+	struct jpeg_error_mgr jerr;
+	cinfo.err = jpeg_std_error(&jerr);
 
+	jpeg_create_decompress(&cinfo);
+
+	printf("Setting memsrcc %d\n", read);
+	fflush(stdout);
+
+	jpeg_mem_src(&cinfo, data, read);
+	
+	printf("Reading header\n");
+	fflush(stdout);
+	jpeg_read_header(&cinfo, 1);
+	
+	printf("Setting calc dims\n");
+	fflush(stdout);
+	jpeg_calc_output_dimensions(&cinfo);
+
+	
+	printf( "Loading jpeg image, size=%d.\n"
+		" - width: %d\n"
+		" - height: %d\n"
+		" - components: %d\n",
+		read, cinfo.output_width, cinfo.output_height, cinfo.output_components);
+
+	rc = cudaMalloc(&imageBuffer, cinfo.output_width * cinfo.output_height * cinfo.output_components);
+	if (cudaSuccess != rc) throw "Unable to allocate image buffer on device";
+
+	uint8_t* buffer = (uint8_t*)malloc(cinfo.output_height * cinfo.output_width * cinfo.output_components);
+	JSAMPARRAY scanlines = (JSAMPARRAY) malloc(sizeof(JSAMPROW) * cinfo.output_height);
+	
+	for (JDIMENSION i=0; i<cinfo.output_height; i++)
+	{
+		scanlines[i] = (JSAMPROW) buffer + i * cinfo.output_width * cinfo.output_components;
+	}
+
+	jpeg_start_decompress(&cinfo);
+	while (cinfo.output_scanline < cinfo.output_height)
+	{
+		jpeg_read_scanlines(&cinfo, scanlines + cinfo.output_scanline, cinfo.output_height - cinfo.output_scanline);
+	}
+	jpeg_finish_decompress(&cinfo);
+	jpeg_destroy_decompress(&cinfo);
+
+	cudaMemcpyAsync(imageBuffer, buffer, cinfo.output_width * cinfo.output_height * cinfo.output_components, cudaMemcpyHostToDevice, stream);
+
+	free(buffer);
+	free(scanlines);
+#else
 	nvjpegHandle_t handle;
 	rc = nvjpegCreateEx(NVJPEG_BACKEND_DEFAULT, NULL, NULL, 0, &handle);
 	if (cudaSuccess != rc) throw "Unable to create jpeg backend";
@@ -252,6 +339,7 @@ void loadJpeg(const char* path, cudaStream_t stream)
 	cudaStreamSynchronize(stream);
 	rc = cudaGetLastError();
 	if (cudaSuccess != rc) throw "Unable to destroy jpeg resources";
+#endif
 }
 
 int main(int /*argc*/, char** /*argv*/)
