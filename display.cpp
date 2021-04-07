@@ -144,7 +144,8 @@ int CudaDisplay::attachShader( GLenum type, const char* path)
 	char *src = (char*)malloc(size + 1);
 	memset(src, 0, size + 1);
 	fseek(f, 0, SEEK_SET);
-	fread(src, 1, size, f);
+	if (1 != fread(src, size, 1, f)) throw "Unable to read shader";
+	
 	fclose(f);
 
 	GLuint shader = glCreateShader(type);

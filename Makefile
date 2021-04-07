@@ -1,10 +1,15 @@
-#ARCH = aarch64-linux
-#AFLAGS = -march=armv8-a -O3 -fPIC
-
-ARCH := x86_64-linux
-AFLAGS := -O3 -fPIC
-
 TARGET = program 
+
+PROC = $(shell uname -p)
+ARCH = $(PROC)-linux
+
+ifeq ($(PROC), x86_64)
+CFLAGS := -DUSE_NVJPEG=1 -O3 -fPIC
+LIBRARIES := -lnvjpeg
+else ifeq ($(PROC), aarch64)
+CFLAGS := -DJETSON=1 -march=armv8-a -O3 -fPIC
+LIBRARIES := -ljpeg
+endif
 
 GL_INC_DIR = /usr/include/GL
 GL_LIB_DIR = /usr/lib/$(ARCH)-gnu
@@ -28,15 +33,13 @@ NVCC	= nvcc -ccbin $(CXX)
 MAKE	= make
 CP	= cp
 
-AFLAGS = 
 IFLAGS = -I$(CUDA_INC_DIR) -I$(K4A_INC_DIR) -I$(GL_INC_DIR) -I$(INC_DIR)
 WFLAGS = -Wall -Wextra -Werror=float-equal -Wuninitialized -Wunused-variable #-Wdouble-promotion
-CFLAGS = $(AFLAGS)  $(WFLAGS)
+CFLAGS += $(WFLAGS)
 NVCCFLAGS = -m64 $(addprefix -Xcompiler ,$(CFLAGS)) $(IFLAGS)
 
 LDFLAGS = -rpath='$$ORIGIN'
-LIBRARIES = -L$(BIN_DIR) -L$(CUDA_LIB_DIR) -L$(GL_LIB_DIR) -lGL -lX11 -lEGL -lGLU -lpthread -lz -lcudart -lcudnn -lcublas -lnvinfer -lnvparsers -lnvinfer_plugin -lnvonnxparser -lnvrtc -lnvjpeg
-LIBRARIES += -ljpeg
+LIBRARIES += -L$(BIN_DIR) -L$(CUDA_LIB_DIR) -L$(GL_LIB_DIR) -lGL -lX11 -lEGL -lGLU -lpthread -lz -lcudart -lcudnn -lcublas -lnvinfer -lnvparsers -lnvinfer_plugin -lnvonnxparser -lnvrtc
 #LIBRARIES += -L$(K4A_LIB_DIR) -lk4a 
 NVLDFLAGS = -m64 $(addprefix -Xcompiler ,$(CFLAGS)) $(addprefix -Xlinker ,$(LDFLAGS)) $(LIBRARIES)
 
