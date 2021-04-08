@@ -45,38 +45,6 @@ void f_test(float4* out, int pitch_out, int width, int height)
 			0, 1);
 }
 
-#if USE_NVJPEG
-// RGB in separate channels (preferable as input to model)
-__global__
-void f_jpeg(float4* out, int pitch_out, uint8_t* rgb, int width, int height)
-{
-	int x = (blockIdx.x * blockDim.x + threadIdx.x);
-	int y = (blockIdx.y * blockDim.y + threadIdx.y);
-	int cstride = width * height;
-	if (x >= width || y >= height) return;
-
-	out[y * pitch_out / sizeof(float4) + x] = make_float4(
-			rgb[0 * cstride + y * width + x] / 255.0f,
-			rgb[1 * cstride + y * width + x] / 255.0f,
-			rgb[2 * cstride + y * width + x] / 255.0f,
-			1);
-}
-__global__
-void f_normalize(float* normalized, uint8_t* rgb, size_t width, size_t height)
-{
-	int x = (blockIdx.x * blockDim.x + threadIdx.x);
-	int y = (blockIdx.y * blockDim.y + threadIdx.y);
-	if (x >= width || y >= height) return;
-	size_t cstride = width * height;
-	size_t scstride = (width/SCALE) * (height/SCALE);
-	size_t offset = y * width + x;
-	size_t soffset = (y / SCALE) * (width/SCALE) + x / SCALE;
-
-	normalized[soffset + 0 * scstride] = (rgb[offset + 0 * cstride]/255.0f - 0.485f) / (0.229f); 
-	normalized[soffset + 1 * scstride] = (rgb[offset + 1 * cstride]/255.0f - 0.456f) / (0.224f); 
-	normalized[soffset + 2 * scstride] = (rgb[offset + 2 * cstride]/255.0f - 0.406f) / (0.225f); 
-}
-#else
 // RGB interleaved as 3 byte tupels
 __global__
 void f_jpeg(float4* out, int pitch_out, uint8_t* rgb, int width, int height)
@@ -105,7 +73,6 @@ void f_normalize(float* normalized, uint8_t* rgb, size_t width, size_t height)
 	normalized[soffset + 1 * scstride] = (rgb[offset*3 + 1]/255.0f - 0.456f) / (0.224f); 
 	normalized[soffset + 2 * scstride] = (rgb[offset*3 + 2]/255.0f - 0.406f) / (0.225f); 
 }
-#endif
 
 __global__
 void f_segment(float4* out, int pitch_out, int* seg, int width, int height)
@@ -231,8 +198,11 @@ int main(int /*argc*/, char** /*argv*/)
 			
 			File jpeg;
 			jpeg.readAll(jpegPath);
-
+#if USE_NVJPEG
+			codec.decodeToDeviceMemoryGPU(imageBuffer, jpeg.data(), jpeg.size(), stream);
+#else
 			codec.decodeToDeviceMemoryCPU(imageBuffer, jpeg.data(), jpeg.size(), stream);
+#endif
 			cudaStreamSynchronize(stream);
 		}
 	
