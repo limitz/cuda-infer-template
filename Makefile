@@ -4,17 +4,21 @@ PROC = $(shell uname -p)
 ARCH = $(PROC)-linux
 
 ifeq ($(PROC), x86_64)
-CFLAGS := -DUSE_NVJPEG=1 -O3 -fPIC
+CFLAGS := -DUSE_NVJPEG=0 -O3 -fPIC
 LIBRARIES := -lnvjpeg -ljpeg
 else ifeq ($(PROC), aarch64)
 CFLAGS := -DJETSON=1 -march=armv8-a -O3 -fPIC
 LIBRARIES := -ljpeg
 endif
 
+ifdef USE_KINECT
+CFLAGS += -DUSE_KINECT=1
+K4A_INC_DIR = /usr/local/kinect/include
+K4A_LIB_DIR = /usr/lib/$(ARCH)-gnu
+endif
+
 GL_INC_DIR = /usr/include/GL
 GL_LIB_DIR = /usr/lib/$(ARCH)-gnu
-#K4A_INC_DIR = /usr/local/kinect/include
-#K4A_LIB_DIR = /usr/lib/$(ARCH)-gnu
 CUDA_INC_DIR = /usr/local/cuda-11.0/include
 CUDA_LIB_DIR = /usr/local/cuda-11.0/lib64
 
@@ -33,14 +37,23 @@ NVCC	= nvcc -ccbin $(CXX)
 MAKE	= make
 CP	= cp
 
-IFLAGS = -I$(CUDA_INC_DIR) -I$(K4A_INC_DIR) -I$(GL_INC_DIR) -I$(INC_DIR)
+IFLAGS = -I$(CUDA_INC_DIR) -I$(GL_INC_DIR) -I$(INC_DIR)
+
+ifdef USE_KINECT
+IFLAGS += -I$(K4A_INC_DIR)	
+endif
+
 WFLAGS = -Wall -Wextra -Werror=float-equal -Wuninitialized -Wunused-variable #-Wdouble-promotion
 CFLAGS += $(WFLAGS)
 NVCCFLAGS = -m64 $(addprefix -Xcompiler ,$(CFLAGS)) $(IFLAGS)
 
 LDFLAGS = -rpath='$$ORIGIN'
 LIBRARIES += -L$(BIN_DIR) -L$(CUDA_LIB_DIR) -L$(GL_LIB_DIR) -lGL -lX11 -lEGL -lGLU -lpthread -lz -lcudart -lcudnn -lcublas -lnvinfer -lnvparsers -lnvinfer_plugin -lnvonnxparser -lnvrtc
-#LIBRARIES += -L$(K4A_LIB_DIR) -lk4a 
+
+ifdef USE_KINECT
+LIBRARIES += -L$(K4A_LIB_DIR) -lk4a 
+endif
+
 NVLDFLAGS = -m64 $(addprefix -Xcompiler ,$(CFLAGS)) $(addprefix -Xlinker ,$(LDFLAGS)) $(LIBRARIES)
 
 GENCODE_FLAGS =
