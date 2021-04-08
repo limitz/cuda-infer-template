@@ -5,7 +5,7 @@ ARCH = $(PROC)-linux
 
 ifeq ($(PROC), x86_64)
 CFLAGS := -DUSE_NVJPEG=1 -O3 -fPIC
-LIBRARIES := -lnvjpeg
+LIBRARIES := -lnvjpeg -ljpeg
 else ifeq ($(PROC), aarch64)
 CFLAGS := -DJETSON=1 -march=armv8-a -O3 -fPIC
 LIBRARIES := -ljpeg

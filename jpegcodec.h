@@ -5,11 +5,10 @@
 #include <string.h>
 #include <cuda_runtime.h>
 
-#if USE_NVPEG 
+#if USE_NVJPEG 
 #include <nvjpeg.h>
-#else
-#include <jpeglib.h>
 #endif
+#include <jpeglib.h>
 
 class File
 {

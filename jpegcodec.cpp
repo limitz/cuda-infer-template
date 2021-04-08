@@ -35,7 +35,7 @@ void JpegCodec::prepare(int width, int height, int channels)
 		throw "Unable to allocate scanlines structure";
 	}
 
-	for (int i=0; i<_height; i++)
+	for (size_t i=0; i<_height; i++)
 	{
 		_scanlines[i] = (JSAMPROW) (_buffer + i * _width * _channels);
 	}
@@ -56,7 +56,7 @@ void JpegCodec::decodeToDeviceMemoryCPU(void* dst, const void* src, int size, cu
 
 	if (_cinfo.output_width != _width 
 	||  _cinfo.output_height != _height
-	||  _cinfo.output_components != _channels)
+	||  _cinfo.output_components != (int) _channels)
 	{
 		jpeg_abort_decompress(&_cinfo);
 		throw "Invalid image format";
@@ -85,12 +85,12 @@ void JpegCodec::decodeToDeviceMemoryGPU(void* dst, const void* src, int size, cu
 	int heights[NVJPEG_MAX_COMPONENT];
 	nvjpegChromaSubsampling_t subsampling;
 	nvjpegJpegState_t state;
-	nvJpegOutputFormat_t fmt = NVJPEG_OUTPUT_RGBI;
+	nvjpegOutputFormat_t fmt = NVJPEG_OUTPUT_RGBI;
 	nvjpegJpegStateCreate(handle, &state);
-	nvjpegGetImageInfo(handle, src, size, &channels, &subsampling, widths, heights);
+	nvjpegGetImageInfo(handle, (uint8_t*) src, size, &channels, &subsampling, widths, heights);
 
-	if (widths[0] != _width
-	||  heights[0] != _height)
+	if (widths[0] != (int)_width
+	||  heights[0] != (int)_height)
 	{
 		nvjpegJpegStateDestroy(state);
 		nvjpegDestroy(handle);
@@ -98,10 +98,10 @@ void JpegCodec::decodeToDeviceMemoryGPU(void* dst, const void* src, int size, cu
 	}
 
 	nvjpegImage_t output;
-	output.channel[0] = dst;
+	output.channel[0] = (uint8_t*) dst;
 	output.pitch[0] = widths[0] * _channels;
 
-	nvjpegDecode(handle, state, src, size, fmt, &output, stream);
+	nvjpegDecode(handle, state, (uint8_t*)src, size, fmt, &output, stream);
 	nvjpegJpegStateDestroy(state);
 	nvjpegDestroy(handle);
 
