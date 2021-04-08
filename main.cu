@@ -18,6 +18,7 @@
 #include <inference.h>
 #include <operators.h>
 #include <asyncwork.h>
+#include <jpegcodec.h>
 
 #ifndef TITLE
 #define TITLE "CUDA INFERENCE DEMO"
@@ -206,127 +207,6 @@ void selectGPU()
 		maxId, prop.name, prop.major, prop.minor);
 }
 
-
-void loadJpeg(const char* path, cudaStream_t stream)
-{
-	int rc;
-	FILE* f = fopen(path, "rb");
-	if (!f) throw "Unable to open JPEG";
-
-	size_t read = 0;
-	size_t allocated = 0;
-	size_t increment = 4096;
-	uint8_t* data = 0;
-
-	while (!feof(f))
-	{
-		if (read <= allocated)
-		{
-			allocated += increment;
-			void* tmp = realloc(data, allocated);
-			if (!tmp) 
-			{
-				free(data);
-				throw "Unable to allocate JPEG memory";
-			}
-			data = (uint8_t*) tmp;
-		}
-		int r = fread(data + read, 1, allocated - read, f);
-		if (ferror(f)) 
-		{
-			printf("ERROR = %d\n", ferror(f));
-			free(data);
-			throw "Error reading file";
-		}
-		read += r;
-	}
-#if USE_NVJPEG
-	nvjpegHandle_t handle;
-	rc = nvjpegCreateEx(NVJPEG_BACKEND_DEFAULT, NULL, NULL, 0, &handle);
-	if (cudaSuccess != rc) throw "Unable to create jpeg backend";
-
-	int channels;
-	int widths[NVJPEG_MAX_COMPONENT], heights[NVJPEG_MAX_COMPONENT];
-	nvjpegChromaSubsampling_t subsampling;
-	nvjpegJpegState_t state;
-	nvjpegOutputFormat_t fmt = NVJPEG_OUTPUT_RGB;
-	nvjpegJpegStateCreate(handle, &state);
-	//nvjpegDecodeBatchedInitialize(handle, state, 1, 1, fmt);
-	nvjpegGetImageInfo(handle, data, read, &channels, &subsampling, widths, heights);
-	cudaStreamSynchronize(stream);
-	
-	printf("Got image of size %lu,  info %d %d %d\n", read, channels, widths[0], heights[0]);
-
-	// to RGB (3 channels, not interleaved, tightly packed for inference)
-	channels = 3;
-	size_t channelSize = widths[0] * heights[0];
-	nvjpegImage_t output;
-	
-	rc = cudaMalloc(&imageBuffer, channels * channelSize);
-	if (cudaSuccess != rc) throw "Unable to allocate image buffer on device";
-
-	/*
-	rc = cudaMalloc(&imageBufferNormalized, channels * channelSize * sizeof(float));
-	if (cudaSuccess != rc) throw "Unable to allocate image buffer on device";
-	*/
-	for (int i=0; i<channels; i++)
-	{
-		output.channel[i] = &imageBuffer[i * channelSize];
-		output.pitch[i] = widths[0];
-	}
-
-	// not pipelined at the moment
-	cudaStreamSynchronize(stream);
-	rc = cudaGetLastError();
-	if (cudaSuccess != rc) throw "Unable to prepare jpeg";
-
-	printf("Decoding\n");
-	nvjpegDecode(handle, state, data, read, fmt, &output, stream);
-	cudaStreamSynchronize(stream);
-	rc = cudaGetLastError();
-	if (cudaSuccess != rc) throw "Unable to decode jpeg";
-	
-	printf("Decoded\n");
-	nvjpegJpegStateDestroy(state);
-	nvjpegDestroy(handle);
-	cudaStreamSynchronize(stream);
-	rc = cudaGetLastError();
-	if (cudaSuccess != rc) throw "Unable to destroy jpeg resources";
-#else
-	struct jpeg_decompress_struct cinfo;
-	struct jpeg_error_mgr jerr;
-	cinfo.err = jpeg_std_error(&jerr);
-
-	jpeg_create_decompress(&cinfo);
-	jpeg_mem_src(&cinfo, data, read);
-	jpeg_read_header(&cinfo, 1);
-	jpeg_calc_output_dimensions(&cinfo);
-	
-	rc = cudaMalloc(&imageBuffer, cinfo.output_width * cinfo.output_height * cinfo.output_components);
-	if (cudaSuccess != rc) throw "Unable to allocate image buffer on device";
-
-	uint8_t* buffer = (uint8_t*)malloc(cinfo.output_height * cinfo.output_width * cinfo.output_components);
-	JSAMPARRAY scanlines = (JSAMPARRAY) malloc(sizeof(JSAMPROW) * cinfo.output_height);
-	for (JDIMENSION i=0; i<cinfo.output_height; i++)
-	{
-		scanlines[i] = (JSAMPROW) buffer + i * cinfo.output_width * cinfo.output_components;
-	}
-
-	jpeg_start_decompress(&cinfo);
-	while (cinfo.output_scanline < cinfo.output_height)
-	{
-		jpeg_read_scanlines(&cinfo, scanlines + cinfo.output_scanline, cinfo.output_height - cinfo.output_scanline);
-	}
-	jpeg_finish_decompress(&cinfo);
-	jpeg_destroy_decompress(&cinfo);
-
-	cudaMemcpyAsync(imageBuffer, buffer, cinfo.output_width * cinfo.output_height * cinfo.output_components, cudaMemcpyHostToDevice, stream);
-
-	free(buffer);
-	free(scanlines);
-#endif
-}
-
 int main(int /*argc*/, char** /*argv*/)
 {
 	int rc;
@@ -343,8 +223,18 @@ int main(int /*argc*/, char** /*argv*/)
 
 		const char* jpegPath = "sheep.jpg";
 		printf("Loading \"%s\"\n", jpegPath);
-		loadJpeg(jpegPath, stream);
-		cudaDeviceSynchronize();
+		
+		JpegCodec codec;
+		codec.prepare(WIDTH, HEIGHT, 3);
+		{
+			cudaMalloc(&imageBuffer, WIDTH * HEIGHT * 3);
+			
+			File jpeg;
+			jpeg.readAll(jpegPath);
+
+			codec.decodeToDeviceMemoryCPU(imageBuffer, jpeg.data(), jpeg.size(), stream);
+			cudaStreamSynchronize(stream);
+		}
 	
 		// copy to output folder
 		const char* modelPath = "models/fcn_resnet101.960x540.engine";
