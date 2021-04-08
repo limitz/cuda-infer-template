@@ -12,6 +12,7 @@
 #include <jpeglib.h>
 #endif
 
+#include <kinect.h>
 #include <display.h>
 #include <pthread.h>
 #include <math.h>
@@ -187,7 +188,6 @@ int main(int /*argc*/, char** /*argv*/)
 		rc = cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
 		if (cudaSuccess != rc) throw "Unable to create CUDA stream";
 
-
 		const char* jpegPath = "sheep.jpg";
 		printf("Loading \"%s\"\n", jpegPath);
 		
@@ -215,6 +215,13 @@ int main(int /*argc*/, char** /*argv*/)
 		CudaDisplay display(TITLE, WIDTH, HEIGHT); 
 		cudaDeviceSynchronize();
 		
+#if USE_KINECT
+		printf("Starting kinect\n");
+		Kinect kinect;
+		kinect.open();
+		kinect.start();
+
+#endif
 		dim3 blockSize = { 16, 16 };
 		dim3 gridSize = { 
 			(WIDTH  + blockSize.x - 1) / blockSize.x, 
@@ -223,7 +230,22 @@ int main(int /*argc*/, char** /*argv*/)
 
 		display.cudaMap(stream);
 		while (true)
-		{	
+		{
+#if USE_KINECT
+			if (kinect.capture())
+			{
+				printf("jpeg size: %0.03f Kb\n", 0.001 * kinect.color.size);
+#if USE_NVJPEG
+				codec.decodeToDeviceMemoryGPU(
+#else
+				codec.decodeToDeviceMemoryCPU(
+#endif
+						imageBuffer, 
+						kinect.color.data, 
+						kinect.color.size, 
+						stream);
+			}
+#endif
 			f_test<<<gridSize, blockSize, 0, stream>>>(
 				display.CUDA.frame.data,
 				display.CUDA.frame.pitch,
@@ -244,9 +266,9 @@ int main(int /*argc*/, char** /*argv*/)
 				display.CUDA.frame.width,
 				display.CUDA.frame.height
 			);
-			
+#if 0	
 			model.infer(stream);
-
+#endif
 			f_segment<<<gridSize, blockSize, 0, stream>>>(
 				display.CUDA.frame.data,
 				display.CUDA.frame.pitch,
@@ -266,6 +288,10 @@ int main(int /*argc*/, char** /*argv*/)
 			// check escape pressed
 			if (display.events()) 
 			{
+#if USE_KINECT
+				kinect.stop();
+				kinect.close();
+#endif
 				display.cudaUnmap(stream);
 				cudaStreamDestroy(stream);
 				return 0;
