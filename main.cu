@@ -175,6 +175,42 @@ void selectGPU()
 		maxId, prop.name, prop.major, prop.minor);
 }
 
+class SaveKinectCapture : public AsyncWork
+{
+public:
+	SaveKinectCapture(const char* filename, Kinect::Capture* capture)
+	{
+		_capture = capture;
+		_filename = strdup(filename);
+	}
+	~SaveKinectCapture()
+	{
+		delete _capture;
+	}
+	virtual void doWork() override
+	{
+		printf("Saving kinect capture...\n");
+		printf("Saving color\n");
+		FILE* f = fopen(_filename, "wb");
+		int written = 0;
+		while (written < _capture->color.size)
+		{
+			int rc = fwrite(((uint8_t*)_capture->color.data) + written, 1, _capture->color.size - written, f);
+			if (rc <= 0)
+			{
+				fprintf(stderr, "Unable to write color image to file. Error %08X\n", rc);
+				break;
+			}
+			written += rc;
+		}
+		printf("DONE\n");
+	}
+
+private:
+	Kinect::Capture* _capture;
+	char* _filename;
+};
+
 int main(int /*argc*/, char** /*argv*/)
 {
 	int rc;
@@ -220,8 +256,15 @@ int main(int /*argc*/, char** /*argv*/)
 		Kinect kinect;
 		kinect.open();
 		kinect.start();
+		
+		printf("Creating async work queue for kinect capture saving\n");
+		AsyncWorkQueue work(4,1000);
 
+		int frame_index = 0;
+		char filename[128];
 #endif
+
+
 		dim3 blockSize = { 16, 16 };
 		dim3 gridSize = { 
 			(WIDTH  + blockSize.x - 1) / blockSize.x, 
@@ -231,21 +274,6 @@ int main(int /*argc*/, char** /*argv*/)
 		display.cudaMap(stream);
 		while (true)
 		{
-#if USE_KINECT
-			if (kinect.capture())
-			{
-				printf("jpeg size: %0.03f Kb\n", 0.001 * kinect.color.size);
-#if USE_NVJPEG
-				codec.decodeToDeviceMemoryGPU(
-#else
-				codec.decodeToDeviceMemoryCPU(
-#endif
-						imageBuffer, 
-						kinect.color.data, 
-						kinect.color.size, 
-						stream);
-			}
-#endif
 			f_test<<<gridSize, blockSize, 0, stream>>>(
 				display.CUDA.frame.data,
 				display.CUDA.frame.pitch,
@@ -253,6 +281,27 @@ int main(int /*argc*/, char** /*argv*/)
 				display.CUDA.frame.height
 			);
 
+#if USE_KINECT
+			auto capture = kinect.capture();
+
+			if (capture)
+			{
+				printf("jpeg size: %0.03f Kb\n", 0.001 * capture->color.size);
+#if USE_NVJPEG
+				codec.decodeToDeviceMemoryGPU(
+#else
+				codec.decodeToDeviceMemoryCPU(
+#endif
+						imageBuffer, 
+						capture->color.data, 
+						capture->color.size, 
+						stream);
+				sprintf(filename, "kinect_%04d.jpg", frame_index++);
+				cudaStreamSynchronize(stream);
+				auto savework = new SaveKinectCapture(filename,capture);
+				work.enqueue(savework);
+			}
+#endif
 			f_normalize<<<gridSize, blockSize, 0, stream>>>(
 				(float*)model.inputFrame.data,
 				imageBuffer,
