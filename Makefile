@@ -46,8 +46,7 @@ NVCCFLAGS = -m64 $(addprefix -Xcompiler ,$(CFLAGS)) $(IFLAGS)
 LDFLAGS = -rpath='$$ORIGIN'
 LIBRARIES += -L$(BIN_DIR) -L$(CUDA_LIB_DIR) -L$(GL_LIB_DIR) -lGL -lX11 -lEGL -lGLU -lpthread -lz -lcudart -lcudnn -lcublas -lnvinfer -lnvparsers -lnvinfer_plugin -lnvonnxparser -lnvrtc
 
-LIBRARIES += -L$(K4A_LIB_DIR) -lk4a 
-
+LIBRARIES += -L$(K4A_LIB_DIR) -lk4a -llz4
 NVLDFLAGS = -m64 $(addprefix -Xcompiler ,$(CFLAGS)) $(addprefix -Xlinker ,$(LDFLAGS)) $(LIBRARIES)
 
 GENCODE_FLAGS =

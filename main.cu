@@ -20,6 +20,7 @@
 #include <operators.h>
 #include <asyncwork.h>
 #include <jpegcodec.h>
+#include <file.h>
 
 #ifndef TITLE
 #define TITLE "CUDA INFERENCE DEMO"
@@ -185,24 +186,22 @@ public:
 	}
 	~SaveKinectCapture()
 	{
+		free(_filename);
 		delete _capture;
 	}
 	virtual void doWork() override
 	{
-		printf("Saving kinect capture...\n");
 		printf("Saving color\n");
-		FILE* f = fopen(_filename, "wb");
-		int written = 0;
-		while (written < _capture->color.size)
-		{
-			int rc = fwrite(((uint8_t*)_capture->color.data) + written, 1, _capture->color.size - written, f);
-			if (rc <= 0)
-			{
-				fprintf(stderr, "Unable to write color image to file. Error %08X\n", rc);
-				break;
-			}
-			written += rc;
-		}
+		
+		char filenameWithExt[128];
+		sprintf(filenameWithExt, "%s.jpg", _filename);
+		File colorFile(_capture->color.data, _capture->color.size, false);
+		colorFile.save(filenameWithExt);
+
+		sprintf(filenameWithExt, "%s.d16.lz4", _filename);
+		File depthFile(_capture->depth.data, _capture->depth.size, false);
+		depthFile.saveCompressed(filenameWithExt);
+
 		printf("DONE\n");
 	}
 
@@ -296,7 +295,7 @@ int main(int /*argc*/, char** /*argv*/)
 						capture->color.data, 
 						capture->color.size, 
 						stream);
-				sprintf(filename, "kinect_%04d.jpg", frame_index++);
+				sprintf(filename, "kinect_%04d", frame_index++);
 				cudaStreamSynchronize(stream);
 				auto savework = new SaveKinectCapture(filename,capture);
 				work.enqueue(savework);
