@@ -9,12 +9,8 @@ Kinect::Kinect()
 	_config.color_format = K4A_IMAGE_FORMAT_COLOR_MJPG;
 	_config.color_resolution = K4A_COLOR_RESOLUTION_1080P;
 	_config.depth_mode = K4A_DEPTH_MODE_NFOV_UNBINNED;
-	_config.camera_fps = K4A_FRAMES_PER_SECOND_30;
+	_config.camera_fps = K4A_FRAMES_PER_SECOND_5;
 	_config.synchronized_images_only = true;
-
-	depth.image = nullptr;
-	color.image = nullptr;
-	_capture = nullptr;
 }
 
 Kinect::~Kinect()
@@ -40,10 +36,6 @@ void Kinect::close()
 void Kinect::start()
 {
 	int rc;
-	rc = k4a_image_create(K4A_IMAGE_FORMAT_DEPTH16,
-			1920, 1080, 1920 * sizeof(uint16_t),
-			&transformedDepth.image);
-	if (K4A_RESULT_SUCCEEDED != rc) throw "Unable to create transformed depth image";
 	
 	rc = k4a_device_start_cameras(_device, &_config);
 	if (K4A_RESULT_SUCCEEDED != rc) throw "Unable to start cameras";
@@ -62,56 +54,27 @@ void Kinect::start()
 
 void Kinect::stop()
 {
-	if (depth.image) 
-	{
-		k4a_image_release(depth.image);
-		depth.image = nullptr;
-	}
-
-	if (color.image)
-	{
-		k4a_image_release(color.image);
-		color.image = nullptr;
-	}
-
-	if (_capture)
-	{
-		k4a_capture_release(_capture);
-		_capture = nullptr;
-	}
 	k4a_device_stop_cameras(_device);
-	k4a_image_release(transformedDepth.image);
-	transformedDepth.image = nullptr;
 }
 
 
-bool Kinect::capture()
+Kinect::Capture* Kinect::capture()
 {
-	if (depth.image) 
-	{
-		k4a_image_release(depth.image);
-		depth.image = nullptr;
-	}
-
-	if (color.image)
-	{
-		k4a_image_release(color.image);
-		color.image = nullptr;
-	}
-
-	if (_capture)
-	{
-		k4a_capture_release(_capture);
-		_capture = nullptr;
-	}
-	
-	int rc = k4a_device_get_capture(_device, &_capture, 0);
+	k4a_capture_t capture;
+	int rc = k4a_device_get_capture(_device, &capture, 0);
 	switch (rc)
 	{
 		case K4A_WAIT_RESULT_FAILED: throw "Unable to capture kinect";
-		case K4A_WAIT_RESULT_TIMEOUT: return false;
+		case K4A_WAIT_RESULT_TIMEOUT: return nullptr;
 		case K4A_WAIT_RESULT_SUCCEEDED: break;
 	}
+
+	return new Capture(capture);
+}
+
+Kinect::Capture::Capture(k4a_capture_t capture)
+{
+	_capture = capture;
 
 	depth.image = k4a_capture_get_depth_image(_capture);
 	depth.data = k4a_image_get_buffer(depth.image);
@@ -125,6 +88,43 @@ bool Kinect::capture()
 	color.width = k4a_image_get_width_pixels(color.image);
 	color.height = k4a_image_get_height_pixels(color.image);
 
-	return true;
+	ir.image = nullptr;
+	transformedDepth.image = nullptr;
+	
+	int rc = k4a_image_create(K4A_IMAGE_FORMAT_DEPTH16,
+			color.width, color.height, color.width * sizeof(uint16_t),
+			&transformedDepth.image);
+	if (K4A_RESULT_SUCCEEDED != rc) throw "Unable to create transformed depth image";
+}
+
+Kinect::Capture::~Capture()
+{
+	if (depth.image) 
+	{
+		k4a_image_release(depth.image);
+		depth.image = nullptr;
+	}
+
+	if (color.image)
+	{
+		k4a_image_release(color.image);
+		color.image = nullptr;
+	}
+
+	if (ir.image)
+	{
+		k4a_image_release(ir.image);
+		color.image = nullptr;
+	}
+	if (transformedDepth.image)
+	{
+		k4a_image_release(transformedDepth.image);
+		color.image = nullptr;
+	}
+	if (_capture)
+	{
+		k4a_capture_release(_capture);
+		_capture = nullptr;
+	}
 }
 #endif
