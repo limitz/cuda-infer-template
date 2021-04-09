@@ -175,7 +175,7 @@ void selectGPU()
 	printf("\nSelected GPU %d: \"%s\" with compute capability %d.%d\n\n", 
 		maxId, prop.name, prop.major, prop.minor);
 }
-
+#if USE_KINECT
 class SaveKinectCapture : public AsyncWork
 {
 public:
@@ -209,6 +209,7 @@ private:
 	Kinect::Capture* _capture;
 	char* _filename;
 };
+#endif
 
 int main(int /*argc*/, char** /*argv*/)
 {
