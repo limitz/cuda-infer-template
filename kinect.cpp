@@ -69,10 +69,10 @@ Kinect::Capture* Kinect::capture()
 		case K4A_WAIT_RESULT_SUCCEEDED: break;
 	}
 
-	return new Capture(capture);
+	return new Capture(capture, _transformation);
 }
 
-Kinect::Capture::Capture(k4a_capture_t capture)
+Kinect::Capture::Capture(k4a_capture_t capture, k4a_transformation_t transformation)
 {
 	_capture = capture;
 
@@ -89,12 +89,20 @@ Kinect::Capture::Capture(k4a_capture_t capture)
 	color.height = k4a_image_get_height_pixels(color.image);
 
 	ir.image = nullptr;
-	transformedDepth.image = nullptr;
 	
 	int rc = k4a_image_create(K4A_IMAGE_FORMAT_DEPTH16,
 			color.width, color.height, color.width * sizeof(uint16_t),
 			&transformedDepth.image);
 	if (K4A_RESULT_SUCCEEDED != rc) throw "Unable to create transformed depth image";
+
+	rc = k4a_transformation_depth_image_to_color_camera(
+			transformation, 
+			depth.image, 
+			transformedDepth.image);
+	transformedDepth.data = k4a_image_get_buffer(transformedDepth.image);
+	transformedDepth.size = k4a_image_get_size(transformedDepth.image);
+	transformedDepth.width = k4a_image_get_width_pixels(transformedDepth.image);
+	transformedDepth.height = k4a_image_get_height_pixels(transformedDepth.image);
 }
 
 Kinect::Capture::~Capture()
