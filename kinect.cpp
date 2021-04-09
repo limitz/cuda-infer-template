@@ -9,7 +9,7 @@ Kinect::Kinect()
 	_config.color_format = K4A_IMAGE_FORMAT_COLOR_MJPG;
 	_config.color_resolution = K4A_COLOR_RESOLUTION_1080P;
 	_config.depth_mode = K4A_DEPTH_MODE_NFOV_UNBINNED;
-	_config.camera_fps = K4A_FRAMES_PER_SECOND_5;
+	_config.camera_fps = K4A_FRAMES_PER_SECOND_15;
 	_config.synchronized_images_only = true;
 }
 
