@@ -1,6 +1,6 @@
 TARGET = program 
 
-PROC = $(shell uname -p)
+PROC = $(shell uname -m)
 ARCH = $(PROC)-linux
 
 ifeq ($(PROC), x86_64)
