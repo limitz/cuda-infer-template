@@ -11,9 +11,11 @@ CFLAGS := -DJETSON=1 -march=armv8-a -O3 -fPIC
 LIBRARIES := -ljpeg
 endif
 
+ifdef USE_KINECT
 CFLAGS += -DUSE_KINECT=1
 K4A_INC_DIR = /usr/local/kinect/include
 K4A_LIB_DIR = /usr/lib/$(ARCH)-gnu
+endif
 
 GL_INC_DIR = /usr/include/GL
 GL_LIB_DIR = /usr/lib/$(ARCH)-gnu
@@ -36,7 +38,10 @@ MAKE	= make
 CP	= cp
 
 IFLAGS = -I$(CUDA_INC_DIR) -I$(GL_INC_DIR) -I$(INC_DIR)
+
+ifdef USE_KINECT
 IFLAGS += -I$(K4A_INC_DIR)	
+endif
 
 WFLAGS = -Wall -Wextra -Werror=float-equal -Wuninitialized -Wunused-variable #-Wdouble-promotion
 CFLAGS += $(WFLAGS)
@@ -45,9 +50,11 @@ NVCCFLAGS = -m64 $(addprefix -Xcompiler ,$(CFLAGS)) $(IFLAGS)
 LDFLAGS = -rpath='$$ORIGIN'
 LIBRARIES += -L$(BIN_DIR) -L$(CUDA_LIB_DIR) -L$(GL_LIB_DIR) -lGL -lX11 -lEGL -lGLU -lpthread -lz -lcudart -lcudnn -lcublas -lnvinfer -lnvparsers -lnvinfer_plugin -lnvonnxparser -lnvrtc -llz4
 
+ifdef USE_KINECT
 LIBRARIES += -L$(K4A_LIB_DIR) -lk4a 
-NVLDFLAGS = -m64 $(addprefix -Xcompiler ,$(CFLAGS)) $(addprefix -Xlinker ,$(LDFLAGS)) $(LIBRARIES)
+endif
 
+NVLDFLAGS = -m64 $(addprefix -Xcompiler ,$(CFLAGS)) $(addprefix -Xlinker ,$(LDFLAGS)) $(LIBRARIES)
 GENCODE_FLAGS =
 SMS = 53 61 70 72 75
 $(foreach sm,$(SMS),$(eval GENCODE_FLAGS += -gencode arch=compute_$(sm),code=sm_$(sm)))
