@@ -42,7 +42,6 @@ void File::readAll(const char* filename)
 		int r = fread(((uint8_t*)_data) + _size, 1, allocated - _size, f);
 		if (ferror(f))
 		{
-			fprintf(stderr, "Error reading file (%08X)", ferror(f));
 			fclose(f);
 			free(_data);
 			throw "Unable to read file";
@@ -108,7 +107,6 @@ void File::saveCompressed(const char* filename, int compressionLevel)
 	}
 
 	size_t csize = LZ4F_compressBegin(ctx, compressed, out_capacity, &prefs);
-	printf("csize = %d\n", csize);
 	if (LZ4F_isError(csize)) 
 	{
 		free(compressed);
@@ -134,7 +132,6 @@ void File::saveCompressed(const char* filename, int compressionLevel)
 		size_t read = remaining < chunk ? remaining : chunk;
 		const uint8_t* in_ptr = bytes() + i;
 		size_t incr = LZ4F_compressUpdate(ctx, compressed, out_capacity, in_ptr, read, NULL);
-		printf("incr = %d\n", incr);
 		if (LZ4F_isError(incr))
 		{
 			free(compressed);
@@ -156,7 +153,6 @@ void File::saveCompressed(const char* filename, int compressionLevel)
 		}
 	}
 	size_t end = LZ4F_compressEnd(ctx, compressed, out_capacity, NULL);
-	printf("end = %d\n", end);
 	if (LZ4F_isError(end))
 	{
 		free(compressed);
