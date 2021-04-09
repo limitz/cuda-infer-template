@@ -199,14 +199,14 @@ public:
 
 		sprintf(header, "P5\n# %s\n%lu %lu\n%d\n", 
 				_filename, 
-				_capture->depth.width, _capture->depth.height,
+				_capture->transformedDepth.width, _capture->transformedDepth.height,
 				0xFFFF);
-		uint8_t* buffer = (uint8_t*)malloc(_capture->depth.size + strlen(header));
+		uint8_t* buffer = (uint8_t*)malloc(_capture->transformedDepth.size + strlen(header));
 		memcpy(buffer, header, strlen(header));
-		memcpy(buffer+strlen(header), _capture->depth.data, _capture->depth.size);
+		memcpy(buffer+strlen(header), _capture->transformedDepth.data, _capture->transformedDepth.size);
 
 		sprintf(filenameWithExt, "%s.pgm.lz4", _filename);
-		File depthFile(buffer, _capture->depth.size + strlen(header), true);
+		File depthFile(buffer, _capture->transformedDepth.size + strlen(header), true);
 		depthFile.saveCompressed(filenameWithExt);
 	}
 

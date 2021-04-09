@@ -21,7 +21,7 @@ public:
 	class Capture
 	{
 	public:
-		Capture(k4a_capture_t capture);
+		Capture(k4a_capture_t capture, k4a_transformation_t transformation);
 		~Capture();
 
 		struct 
