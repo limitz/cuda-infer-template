@@ -191,8 +191,6 @@ public:
 	}
 	virtual void doWork() override
 	{
-		printf("Saving color\n");
-		
 		char filenameWithExt[128];
 		sprintf(filenameWithExt, "%s.jpg", _filename);
 		File colorFile(_capture->color.data, _capture->color.size, false);
@@ -201,8 +199,6 @@ public:
 		sprintf(filenameWithExt, "%s.d16.lz4", _filename);
 		File depthFile(_capture->depth.data, _capture->depth.size, false);
 		depthFile.saveCompressed(filenameWithExt);
-
-		printf("DONE\n");
 	}
 
 private:
@@ -286,7 +282,6 @@ int main(int /*argc*/, char** /*argv*/)
 
 			if (capture)
 			{
-				printf("jpeg size: %0.03f Kb\n", 0.001 * capture->color.size);
 #if USE_NVJPEG
 				codec.decodeToDeviceMemoryGPU(
 #else
@@ -296,7 +291,7 @@ int main(int /*argc*/, char** /*argv*/)
 						capture->color.data, 
 						capture->color.size, 
 						stream);
-				sprintf(filename, "kinect_%04d", frame_index++);
+				sprintf(filename, "/mnt/share/kinect_%04d", frame_index++);
 				cudaStreamSynchronize(stream);
 				auto savework = new SaveKinectCapture(filename,capture);
 				work.enqueue(savework);
