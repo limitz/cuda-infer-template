@@ -84,19 +84,16 @@ void File::saveCompressed(const char* filename, int compressionLevel)
 		throw "Unable to create compression context";
 	}
 
-	LZ4F_preferences_t prefs = {
-		.frameInfo = {
-			.blockSizeID = LZ4F_max1MB,
-			.blockMode = LZ4F_blockLinked,
-			.contentChecksumFlag = LZ4F_noContentChecksum,
-			.frameType = LZ4F_frame,
-			.contentSize = 0,
-			.reserved = {0},
-		},
-		.compressionLevel = compressionLevel,
-		.autoFlush = 0,
-		.reserved = {0},
-	};
+	LZ4F_preferences_t prefs;
+	memset(&prefs, 0, sizeof(prefs));
+
+	prefs.frameInfo.blockSizeID = LZ4F_max1MB;
+	prefs.frameInfo.blockMode = LZ4F_blockLinked;
+	prefs.frameInfo.contentChecksumFlag = LZ4F_noContentChecksum;
+	prefs.frameInfo.frameType = LZ4F_frame;
+	prefs.frameInfo.contentSize = 0;
+	prefs.compressionLevel = compressionLevel;
+	prefs.autoFlush = 0;
 
 	size_t out_capacity = LZ4F_compressBound(chunk, &prefs);
 	uint8_t* compressed = (uint8_t*)malloc(out_capacity);

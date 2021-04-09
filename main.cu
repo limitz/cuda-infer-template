@@ -192,12 +192,21 @@ public:
 	virtual void doWork() override
 	{
 		char filenameWithExt[128];
+		char header[128];
 		sprintf(filenameWithExt, "%s.jpg", _filename);
 		File colorFile(_capture->color.data, _capture->color.size, false);
 		colorFile.save(filenameWithExt);
 
-		sprintf(filenameWithExt, "%s.d16.lz4", _filename);
-		File depthFile(_capture->depth.data, _capture->depth.size, false);
+		sprintf(header, "P5\n# %s\n%lu %lu\n%d\n", 
+				_filename, 
+				_capture->depth.width, _capture->depth.height,
+				0xFFFF);
+		uint8_t* buffer = (uint8_t*)malloc(_capture->depth.size + strlen(header));
+		memcpy(buffer, header, strlen(header));
+		memcpy(buffer+strlen(header), _capture->depth.data, _capture->depth.size);
+
+		sprintf(filenameWithExt, "%s.pgm.lz4", _filename);
+		File depthFile(buffer, _capture->depth.size + strlen(header), true);
 		depthFile.saveCompressed(filenameWithExt);
 	}
 
@@ -291,7 +300,7 @@ int main(int /*argc*/, char** /*argv*/)
 						capture->color.data, 
 						capture->color.size, 
 						stream);
-				sprintf(filename, "/mnt/share/kinect_%04d", frame_index++);
+				sprintf(filename, "/mnt/ram/kinect_%04d", frame_index++);
 				cudaStreamSynchronize(stream);
 				auto savework = new SaveKinectCapture(filename,capture);
 				work.enqueue(savework);
