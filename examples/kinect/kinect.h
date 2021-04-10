@@ -29,6 +29,10 @@ public:
 		k4a_capture_t _capture;
 	};
 
+	void setColorResolution(size_t res);
+	void setDepthMode(bool nfov, bool binned);
+	void setFramesPerSecond(size_t rate);
+
 	void open();
 	void start();
 	void stop();
