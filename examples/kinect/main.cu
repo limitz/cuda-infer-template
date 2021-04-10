@@ -21,6 +21,7 @@
 #include <asyncwork.h>
 #include <jpegcodec.h>
 #include <file.h>
+#include <config.h>
 
 #ifndef TITLE
 #define TITLE "CUDA INFERENCE DEMO"
@@ -222,6 +223,12 @@ int main(int /*argc*/, char** /*argv*/)
 
 	try 
 	{
+		Config config;
+		config.loadFile("settings1.conf");
+		config.loadFile("settings2.conf");
+		config.printHelp();
+		config.print();
+
 		printf("Selecting the best GPU\n");
 		selectGPU();
 		
