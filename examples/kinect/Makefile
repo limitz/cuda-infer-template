@@ -46,7 +46,7 @@ $(foreach sm,$(SMS),$(eval GENCODE_FLAGS += -gencode arch=compute_$(sm),code=sm_
 HIGHEST_SM := $(lastword $(sort $(SMS)))
 GENCODE_FLAGS += -gencode arch=compute_$(HIGHEST_SM),code=compute_$(HIGHEST_SM)
 
-SOURCES  := $(wildcard ./*.c*) $(wildcard ../../*.c*)
+SOURCES  := $(wildcard ./*.cpp) $(wildcard ../../*.cpp) $(wildcard ./*.cu) $(wildcard ../../*.cu)
 INCLUDES := $(wildcard ./*.h ) $(wildcard ../../*.h )
 OBJECTS  := $(patsubst ./%.cpp, $(OBJ_DIR)/%.o, $(patsubst ../../%.cpp, $(OBJ_DIR)/%.o, $(patsubst ./%.cu, $(OBJ_DIR)/%.o, $(patsubst ../../%.cu, $(OBJ_DIR)/%.o, $(SOURCES)))))
 
