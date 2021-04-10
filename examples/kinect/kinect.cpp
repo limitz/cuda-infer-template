@@ -1,5 +1,4 @@
 #include <kinect.h>
-#if USE_KINECT
 
 Kinect::Kinect()
 {
@@ -135,4 +134,3 @@ Kinect::Capture::~Capture()
 		_capture = nullptr;
 	}
 }
-#endif

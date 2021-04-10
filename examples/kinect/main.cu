@@ -175,7 +175,7 @@ void selectGPU()
 	printf("\nSelected GPU %d: \"%s\" with compute capability %d.%d\n\n", 
 		maxId, prop.name, prop.major, prop.minor);
 }
-#if USE_KINECT
+
 class SaveKinectCapture : public AsyncWork
 {
 public:
@@ -214,7 +214,6 @@ private:
 	Kinect::Capture* _capture;
 	char* _filename;
 };
-#endif
 
 int main(int /*argc*/, char** /*argv*/)
 {
@@ -229,34 +228,14 @@ int main(int /*argc*/, char** /*argv*/)
 		rc = cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
 		if (cudaSuccess != rc) throw "Unable to create CUDA stream";
 
-		const char* jpegPath = "sheep.jpg";
-		printf("Loading \"%s\"\n", jpegPath);
-		
 		JpegCodec codec;
 		codec.prepare(WIDTH, HEIGHT, 3);
-		{
-			cudaMalloc(&imageBuffer, WIDTH * HEIGHT * 3);
-			
-			File jpeg;
-			jpeg.readAll(jpegPath);
-#if USE_NVJPEG
-			codec.decodeToDeviceMemoryGPU(imageBuffer, jpeg.data(), jpeg.size(), stream);
-#else
-			codec.decodeToDeviceMemoryCPU(imageBuffer, jpeg.data(), jpeg.size(), stream);
-#endif
-			cudaStreamSynchronize(stream);
-		}
-	
-		// copy to output folder
-		const char* modelPath = "models/fcn_resnet101.960x540.engine";
-		printf("Loading \"%s\"", modelPath);
-		Model model(modelPath);
+		rc = cudaMalloc(&imageBuffer, WIDTH * HEIGHT * 3);
+		if (cudaSuccess != rc) throw "Unable to allocate image buffer";
 
-		printf("Creating screen\n");
 		CudaDisplay display(TITLE, WIDTH, HEIGHT); 
 		cudaDeviceSynchronize();
 		
-#if USE_KINECT
 		printf("Starting kinect\n");
 		Kinect kinect;
 		kinect.open();
@@ -267,7 +246,6 @@ int main(int /*argc*/, char** /*argv*/)
 
 		int frame_index = 0;
 		char filename[128];
-#endif
 
 
 		dim3 blockSize = { 16, 16 };
@@ -286,7 +264,6 @@ int main(int /*argc*/, char** /*argv*/)
 				display.CUDA.frame.height
 			);
 
-#if USE_KINECT
 			auto capture = kinect.capture();
 
 			if (capture)
@@ -305,27 +282,10 @@ int main(int /*argc*/, char** /*argv*/)
 				auto savework = new SaveKinectCapture(filename,capture);
 				work.enqueue(savework);
 			}
-#endif
-			f_normalize<<<gridSize, blockSize, 0, stream>>>(
-				(float*)model.inputFrame.data,
-				imageBuffer,
-				display.CUDA.frame.width,
-				display.CUDA.frame.height
-			);
 			f_jpeg<<<gridSize, blockSize, 0, stream>>>(
 				display.CUDA.frame.data,
 				display.CUDA.frame.pitch,
 				imageBuffer,
-				display.CUDA.frame.width,
-				display.CUDA.frame.height
-			);
-#if 0	
-			model.infer(stream);
-#endif
-			f_segment<<<gridSize, blockSize, 0, stream>>>(
-				display.CUDA.frame.data,
-				display.CUDA.frame.pitch,
-				(int*)model.outputFrame.data,
 				display.CUDA.frame.width,
 				display.CUDA.frame.height
 			);
@@ -341,10 +301,8 @@ int main(int /*argc*/, char** /*argv*/)
 			// check escape pressed
 			if (display.events()) 
 			{
-#if USE_KINECT
 				kinect.stop();
 				kinect.close();
-#endif
 				display.cudaUnmap(stream);
 				cudaStreamDestroy(stream);
 				return 0;
