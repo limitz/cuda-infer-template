@@ -46,6 +46,15 @@ public:
 	void print();
 	void printHelp();
 
+	const ConfigEntry& get(const char* key) 
+	{
+		for (size_t i=0; i<_numEntries; i++)
+		{
+			if (!strcmp(_entries[i].key(), key)) return _entries[i];
+		}
+		fprintf(stderr, "Config did not contain an entry for key \"%s\"", key);
+		throw "Config key not found";
+	}
 	const ConfigEntry* entries() const { return _entries; }
 	size_t count() const { return _numEntries; }
 private:

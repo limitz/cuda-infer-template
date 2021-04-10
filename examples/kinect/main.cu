@@ -224,8 +224,8 @@ int main(int /*argc*/, char** /*argv*/)
 	try 
 	{
 		Config config;
-		config.loadFile("settings1.conf");
-		config.loadFile("settings2.conf");
+		config.loadFile("defaults.config");
+		config.loadFile("device.config");
 		config.printHelp();
 		config.print();
 
@@ -245,6 +245,10 @@ int main(int /*argc*/, char** /*argv*/)
 		
 		printf("Starting kinect\n");
 		Kinect kinect;
+		kinect.setFramesPerSecond(config.get("KinectFramesPerSecond").uint32());
+		kinect.setColorResolution(config.get("KinectColorResolution").uint32());
+		kinect.setDepthMode(config.get("KinectDepthModeNFOV").boolean(), config.get("KinectDepthModeBinned").boolean());
+		
 		kinect.open();
 		kinect.start();
 		

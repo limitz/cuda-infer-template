@@ -16,6 +16,40 @@ Kinect::~Kinect()
 {
 	
 }
+	
+void Kinect::setColorResolution(size_t res)
+{
+	switch (res)
+	{
+	case  720: _config.color_resolution = K4A_COLOR_RESOLUTION_720P;  break;
+	case 1080: _config.color_resolution = K4A_COLOR_RESOLUTION_1080P; break;
+	case 1440: _config.color_resolution = K4A_COLOR_RESOLUTION_1440P; break;
+	case 1536: _config.color_resolution = K4A_COLOR_RESOLUTION_1536P; break;
+	case 2160: _config.color_resolution = K4A_COLOR_RESOLUTION_2160P; break;
+	case 3072: _config.color_resolution = K4A_COLOR_RESOLUTION_3072P; break;
+	default:
+		   throw "Resolution not supported";
+	}
+}
+
+void Kinect::setDepthMode(bool nfov, bool binned)
+{
+	_config.depth_mode = nfov ? (binned ? K4A_DEPTH_MODE_NFOV_2X2BINNED : K4A_DEPTH_MODE_NFOV_UNBINNED)
+	                          : (binned ? K4A_DEPTH_MODE_WFOV_2X2BINNED : K4A_DEPTH_MODE_WFOV_UNBINNED);
+
+	
+}
+void Kinect::setFramesPerSecond(size_t rate)
+{
+	switch(rate)
+	{
+	case  5: _config.camera_fps = K4A_FRAMES_PER_SECOND_5; break;
+	case 15: _config.camera_fps = K4A_FRAMES_PER_SECOND_15; break;
+	case 30: _config.camera_fps = K4A_FRAMES_PER_SECOND_30; break;
+	default: throw "Frames/sec not supported";
+	}
+}
+
 
 void Kinect::open()
 {
