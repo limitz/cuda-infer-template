@@ -1,11 +1,4 @@
 #pragma once
-
-#ifndef USE_KINECT
-#define USE_KINECT 0
-#endif
-
-#if USE_KINECT
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -51,4 +44,3 @@ private:
 	k4a_device_configuration_t _config;
 };
 
-#endif
