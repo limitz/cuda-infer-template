@@ -354,7 +354,6 @@ int main(int /*argc*/, char** /*argv*/)
 				display.CUDA.frame.width,
 				display.CUDA.frame.height
 			);
-
 			if (s_kinectShouldStart && !s_isStarted)
 			{
 				s_isStarted = true;
@@ -372,6 +371,7 @@ int main(int /*argc*/, char** /*argv*/)
 
 			if (capture)
 			{
+#if 0
 #if USE_NVJPEG
 				codec.decodeToDeviceMemoryGPU(
 #else
@@ -381,6 +381,7 @@ int main(int /*argc*/, char** /*argv*/)
 						capture->color.data, 
 						capture->color.size, 
 						stream);
+#endif
 				sprintf(filename, "%s/kinect_%04d", 
 					outputDir,
 					frame_index++);
@@ -389,6 +390,7 @@ int main(int /*argc*/, char** /*argv*/)
 				auto savework = new SaveKinectCapture(filename,capture);
 				work.enqueue(savework);
 			}
+#if 0
 			f_jpeg<<<gridSize, blockSize, 0, stream>>>(
 				display.CUDA.frame.data,
 				display.CUDA.frame.pitch,
@@ -396,7 +398,7 @@ int main(int /*argc*/, char** /*argv*/)
 				display.CUDA.frame.width,
 				display.CUDA.frame.height
 			);
-
+#endif
 			// copies the CUDA.frame.data to GL.pbaddr
 			// and unmaps the GL.pbo
 			display.cudaFinish(stream);
