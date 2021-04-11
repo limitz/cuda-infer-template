@@ -51,24 +51,14 @@ void Kinect::setFramesPerSecond(size_t rate)
 }
 
 
-void Kinect::open()
+void Kinect::start()
 {
 	int rc;
-
 	rc = k4a_device_get_installed_count();
 	if (rc <= 0) throw "No kinect found";
 
 	rc = k4a_device_open(K4A_DEVICE_DEFAULT, &_device);
 	if (K4A_RESULT_SUCCEEDED != rc) throw "Unable to open kinect";
-}
-
-void Kinect::close()
-{
-}
-
-void Kinect::start()
-{
-	int rc;
 	
 	rc = k4a_device_start_cameras(_device, &_config);
 	if (K4A_RESULT_SUCCEEDED != rc) throw "Unable to start cameras";
@@ -88,6 +78,8 @@ void Kinect::start()
 void Kinect::stop()
 {
 	k4a_device_stop_cameras(_device);
+	k4a_device_close(_device);
+	_device = nullptr;
 }
 
 

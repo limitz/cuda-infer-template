@@ -312,7 +312,6 @@ int main(int /*argc*/, char** /*argv*/)
 				config.get("KinectDepthModeNFOV").boolean(), 
 				config.get("KinectDepthModeBinned").boolean());
 		
-			kinect.open();
 		//	kinect.start();
 		}
 		// SETUP ASYNCWORKQUEUE
@@ -403,7 +402,6 @@ int main(int /*argc*/, char** /*argv*/)
 					if (!config.get("IsController").boolean()) 
 					{
 						if (s_started)	kinect.stop();
-						kinect.close();
 					}
 					display.cudaUnmap(stream);
 					cudaStreamDestroy(stream);

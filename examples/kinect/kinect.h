@@ -33,10 +33,8 @@ public:
 	void setDepthMode(bool nfov, bool binned);
 	void setFramesPerSecond(size_t rate);
 
-	void open();
 	void start();
 	void stop();
-	void close();
 
 	Kinect::Capture* capture();
 
