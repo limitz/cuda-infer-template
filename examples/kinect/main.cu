@@ -223,31 +223,30 @@ private:
 
 
 //quick and dirty
-static bool s_started = false;
+static bool s_isStarted = false;
 static const char* s_name = nullptr;
 static bool s_isController = false;
+static bool s_kinectShouldStart = false;
+static bool s_kinectShouldStop = false;
 
 static void onTransceiverRx(UDPTransceiver* trx, const char* ip, const uint8_t* message, size_t size, void* param)
 {
-	Kinect* k = (Kinect*) param;
 	printf("[%s]: %s\n", ip, message);
 	char* mstr = (char*) message;
 
-	if (!strcmp(mstr, "PING"))
-	{
-		trx->transmit(s_name, strlen(s_name));
-	}
 	if (!s_isController)
 	{
+		if (!strcmp(mstr, "PING"))
+		{
+			trx->transmit(s_name, strlen(s_name));
+		}
 		if (!strcmp(mstr, "START"))
 		{
-			if (!s_started) k->start();
-			s_started = true;
+			s_kinectShouldStart = true;
 		}
 		if (!strcmp(mstr, "STOP"))
 		{
-			if (s_started) k->stop();
-			s_started = false;
+			s_kinectShouldStop = true;
 		}
 	}
 }
@@ -356,6 +355,19 @@ int main(int /*argc*/, char** /*argv*/)
 				display.CUDA.frame.height
 			);
 
+			if (s_kinectShouldStart && !s_isStarted)
+			{
+				s_isStarted = true;
+				s_kinectShouldStart = false;
+				kinect.start();
+			}
+			if (s_kinectShouldStop && s_isStarted)
+			{
+				s_isStarted = false;
+				s_kinectShouldStop = false;
+				kinect.stop();
+			}
+
 			auto capture = kinect.capture();
 
 			if (capture)
@@ -400,7 +412,7 @@ int main(int /*argc*/, char** /*argv*/)
 				{
 					if (!config.get("IsController").boolean()) 
 					{
-						if (s_started)	kinect.stop();
+						if (s_isStarted)	kinect.stop();
 					}
 					display.cudaUnmap(stream);
 					cudaStreamDestroy(stream);
