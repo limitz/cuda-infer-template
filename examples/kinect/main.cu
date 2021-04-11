@@ -22,6 +22,7 @@
 #include <jpegcodec.h>
 #include <file.h>
 #include <config.h>
+#include <transceiver.h>
 
 #ifndef TITLE
 #define TITLE "CUDA INFERENCE DEMO"
@@ -216,6 +217,11 @@ private:
 	char* _filename;
 };
 
+static void onTransceiverRx(const uint8_t* message, size_t size, void* param)
+{
+	printf("MESSAGE RECEIVED: %s\n", message);
+}
+
 int main(int /*argc*/, char** /*argv*/)
 {
 	int rc;
@@ -229,6 +235,16 @@ int main(int /*argc*/, char** /*argv*/)
 		config.printHelp();
 		config.print();
 
+		UDPTransceiver transceiver;
+		transceiver.setMulticastAddress("239.255.255.250");
+		transceiver.setPort(1900);
+		transceiver.setRxCallback(onTransceiverRx, nullptr);
+		transceiver.start();
+		usleep(1000000);
+
+		const char* message = "PING";
+		transceiver.transmit((const uint8_t*)message, strlen(message) + 1);
+		
 		printf("Selecting the best GPU\n");
 		selectGPU();
 		
