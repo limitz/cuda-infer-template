@@ -61,9 +61,12 @@ AsyncWork* AsyncWorkQueue::getWork()
 AsyncWorkQueue::~AsyncWorkQueue()
 {
 	_active = false;
+	// for now just wait one second hoping that this will be enough to clear all ongoing work
+	usleep(1000000);
 	for (size_t i=0; i<_nthreads; i++)
 	{
-		pthread_join(_threads[i], NULL);
+		//pthread_join(_threads[i], NULL);
+		pthread_cancel(_threads[i]);
 	}
 	free(_threads);
 	

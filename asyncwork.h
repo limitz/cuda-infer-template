@@ -44,6 +44,7 @@ public:
 	AsyncWorkQueue(size_t threads, size_t capacity);
 	~AsyncWorkQueue();
 	int enqueue(AsyncWork* worker);
+	void join();
 
 protected:
 	AsyncWork* getWork();

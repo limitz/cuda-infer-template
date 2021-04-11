@@ -217,9 +217,23 @@ private:
 	char* _filename;
 };
 
-static void onTransceiverRx(const uint8_t* message, size_t size, void* param)
+static void onTransceiverRx(UDPTransceiver* trx, const char* ip, const uint8_t* message, size_t size, void* param)
 {
-	printf("MESSAGE RECEIVED: %s\n", message);
+	printf("incoming trx message from %s: %s\n", ip, message);
+	if (!memcmp(message, "PING", 4))
+	{
+		trx->transmit("PONG", 4);
+	}
+}
+
+static void* pingProc(void* param)
+{
+	while (1)
+	{
+		UDPTransceiver* tx = (UDPTransceiver*)param;
+		tx->transmit("PING", 4);
+		usleep(2000000);
+	}
 }
 
 int main(int /*argc*/, char** /*argv*/)
@@ -229,52 +243,79 @@ int main(int /*argc*/, char** /*argv*/)
 
 	try 
 	{
+
+		// LOAD CONFIG
 		Config config;
-		config.loadFile("defaults.config");
-		config.loadFile("device.config");
+		config.loadFile("global.config");
+		try 
+		{
+			config.loadFile("local.config");
+		}
+		catch (const char* &e)
+		{
+			fprintf( stderr, "%s\n", e);
+			printf( "WARN: local.config was not found or could not be read.\n"
+				"WARN: using only settings specified in global.config.\n");
+		}
 		config.printHelp();
 		config.print();
 
-		UDPTransceiver transceiver;
-		transceiver.setMulticastAddress("239.255.255.250");
-		transceiver.setPort(1900);
-		transceiver.setRxCallback(onTransceiverRx, nullptr);
-		transceiver.start();
-		usleep(1000000);
-
-		const char* message = "PING";
-		transceiver.transmit((const uint8_t*)message, strlen(message) + 1);
-		
-		printf("Selecting the best GPU\n");
+		// SETUP GPU
+		printf("Setup GPU\n");
 		selectGPU();
 		
 		rc = cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
 		if (cudaSuccess != rc) throw "Unable to create CUDA stream";
 
+		// SETUP JPEG CODEC
+		printf("Setup JPEG CODEC\n");
 		JpegCodec codec;
 		codec.prepare(WIDTH, HEIGHT, 3);
 		rc = cudaMalloc(&imageBuffer, WIDTH * HEIGHT * 3);
 		if (cudaSuccess != rc) throw "Unable to allocate image buffer";
 
+		// SETUP DISPLAY
+		printf("Setup display\n");
 		CudaDisplay display(TITLE, WIDTH, HEIGHT); 
 		cudaDeviceSynchronize();
 		
-		printf("Starting kinect\n");
+		// SETUP KINECT
+		printf("Setup kinect\n");
 		Kinect kinect;
 		kinect.setFramesPerSecond(config.get("KinectFramesPerSecond").uint32());
 		kinect.setColorResolution(config.get("KinectColorResolution").uint32());
-		kinect.setDepthMode(config.get("KinectDepthModeNFOV").boolean(), config.get("KinectDepthModeBinned").boolean());
+		kinect.setDepthMode(
+				config.get("KinectDepthModeNFOV").boolean(), 
+				config.get("KinectDepthModeBinned").boolean());
 		
 		kinect.open();
 		kinect.start();
 		
-		printf("Creating async work queue for kinect capture saving\n");
+		// SETUP ASYNCWORKQUEUE
+		printf("Setup async work queue\n");
 		AsyncWorkQueue work(4,1000);
+
+		// SETUP TRANSCEIVER
+		printf("Setup transceiver\n");
+		UDPTransceiver transceiver;
+		transceiver.setMulticastAddress(config.get("MulticastAddress").string());
+		transceiver.setPort(config.get("MulticastPort").uint32());
+		transceiver.setRxCallback(onTransceiverRx, &kinect);
+		transceiver.start();	
+
+		bool isController = config.get("IsController").boolean();
+		pthread_t pingThread = 0;
+		if (isController)
+		{
+			pthread_create(&pingThread, nullptr, pingProc, &transceiver);
+		}
+
+		// READY TO RUN
+		
+		const char* outputDir = config.get("OutputDirectory").string();
 
 		int frame_index = 0;
 		char filename[128];
-
-
 		dim3 blockSize = { 16, 16 };
 		dim3 gridSize = { 
 			(WIDTH  + blockSize.x - 1) / blockSize.x, 
@@ -304,7 +345,10 @@ int main(int /*argc*/, char** /*argv*/)
 						capture->color.data, 
 						capture->color.size, 
 						stream);
-				sprintf(filename, "/mnt/ram/kinect_%04d", frame_index++);
+				sprintf(filename, "%s/kinect_%04d", 
+					outputDir,
+					frame_index++);
+
 				cudaStreamSynchronize(stream);
 				auto savework = new SaveKinectCapture(filename,capture);
 				work.enqueue(savework);
