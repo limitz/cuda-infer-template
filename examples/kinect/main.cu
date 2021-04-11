@@ -225,6 +225,7 @@ private:
 //quick and dirty
 static bool s_started = false;
 static const char* s_name = nullptr;
+static bool s_isController = false;
 
 static void onTransceiverRx(UDPTransceiver* trx, const char* ip, const uint8_t* message, size_t size, void* param)
 {
@@ -236,15 +237,18 @@ static void onTransceiverRx(UDPTransceiver* trx, const char* ip, const uint8_t* 
 	{
 		trx->transmit(s_name, strlen(s_name));
 	}
-	if (!strcmp(mstr, "START"))
+	if (!s_isController)
 	{
-		if (!s_started) k->start();
-		s_started = true;
-	}
-	if (!strcmp(mstr, "STOP"))
-	{
-		if (s_started) k->stop();
-		s_started = false;
+		if (!strcmp(mstr, "START"))
+		{
+			if (!s_started) k->start();
+			s_started = true;
+		}
+		if (!strcmp(mstr, "STOP"))
+		{
+			if (s_started) k->stop();
+			s_started = false;
+		}
 	}
 }
 
@@ -302,18 +306,13 @@ int main(int /*argc*/, char** /*argv*/)
 		cudaDeviceSynchronize();
 		
 		Kinect kinect;
-		if (!config.get("IsController").boolean())
-		{
-			// SETUP KINECT
-			printf("Setup kinect\n");
-			kinect.setFramesPerSecond(config.get("KinectFramesPerSecond").uint32());
-			kinect.setColorResolution(config.get("KinectColorResolution").uint32());
-			kinect.setDepthMode(
-				config.get("KinectDepthModeNFOV").boolean(), 
-				config.get("KinectDepthModeBinned").boolean());
+		printf("Setup kinect\n");
+		kinect.setFramesPerSecond(config.get("KinectFramesPerSecond").uint32());
+		kinect.setColorResolution(config.get("KinectColorResolution").uint32());
+		kinect.setDepthMode(
+			config.get("KinectDepthModeNFOV").boolean(), 
+			config.get("KinectDepthModeBinned").boolean());
 		
-		//	kinect.start();
-		}
 		// SETUP ASYNCWORKQUEUE
 		printf("Setup async work queue\n");
 		AsyncWorkQueue work(4,1000);
@@ -322,15 +321,15 @@ int main(int /*argc*/, char** /*argv*/)
 		// SETUP TRANSCEIVER
 		printf("Setup transceiver\n");
 		s_name = config.get("NodeName").string();
+		s_isController = config.get("IsController").boolean();
 		UDPTransceiver transceiver;
 		transceiver.setMulticastAddress(config.get("MulticastAddress").string());
 		transceiver.setPort(config.get("MulticastPort").uint32());
 		transceiver.setRxCallback(onTransceiverRx, &kinect);
 		transceiver.start();	
 
-		bool isController = config.get("IsController").boolean();
 		pthread_t pingThread = 0;
-		if (isController)
+		if (s_isController)
 		{
 			pthread_create(&pingThread, nullptr, pingProc, &transceiver);
 		}
