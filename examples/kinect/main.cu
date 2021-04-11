@@ -219,7 +219,7 @@ private:
 
 static void onTransceiverRx(UDPTransceiver* trx, const char* ip, const uint8_t* message, size_t size, void* param)
 {
-	printf("incoming trx message from %s: %s\n", ip, message);
+	printf("[%s]: %s\n", ip, message);
 	if (!memcmp(message, "PING", 4))
 	{
 		trx->transmit("PONG", 4);
