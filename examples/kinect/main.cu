@@ -32,6 +32,10 @@
 #define USE_NVJPEG 0
 #endif
 
+#ifndef MIN
+#define MIN(a,b) ((b) < (a) ? (b) : (a))
+#endif
+
 //width and height defines come from inference.h at the moment
 
 static uint8_t* imageBuffer = {0};
@@ -217,12 +221,30 @@ private:
 	char* _filename;
 };
 
+
+//quick and dirty
+static bool s_started = false;
+static const char* s_name = nullptr;
+
 static void onTransceiverRx(UDPTransceiver* trx, const char* ip, const uint8_t* message, size_t size, void* param)
 {
+	Kinect* k = (Kinect*) param;
 	printf("[%s]: %s\n", ip, message);
-	if (!memcmp(message, "PING", 4))
+	char mstr = (char*) message;
+
+	if (!strcmp(message, "PING"))
 	{
 		trx->transmit("PONG", 4);
+	}
+	if (!strcmp(message, "START"))
+	{
+		if (!s_started) k->start();
+		s_started = true;
+	}
+	if (!strcmp(message, "STOP"))
+	{
+		if (s_started) k->stop();
+		s_started = false;
 	}
 }
 
@@ -279,24 +301,28 @@ int main(int /*argc*/, char** /*argv*/)
 		CudaDisplay display(TITLE, WIDTH, HEIGHT); 
 		cudaDeviceSynchronize();
 		
-		// SETUP KINECT
-		printf("Setup kinect\n");
 		Kinect kinect;
-		kinect.setFramesPerSecond(config.get("KinectFramesPerSecond").uint32());
-		kinect.setColorResolution(config.get("KinectColorResolution").uint32());
-		kinect.setDepthMode(
+		if (!config.get("IsController").boolean())
+		{
+			// SETUP KINECT
+			printf("Setup kinect\n");
+			kinect.setFramesPerSecond(config.get("KinectFramesPerSecond").uint32());
+			kinect.setColorResolution(config.get("KinectColorResolution").uint32());
+			kinect.setDepthMode(
 				config.get("KinectDepthModeNFOV").boolean(), 
 				config.get("KinectDepthModeBinned").boolean());
 		
-		kinect.open();
-		kinect.start();
-		
+			kinect.open();
+		//	kinect.start();
+		}
 		// SETUP ASYNCWORKQUEUE
 		printf("Setup async work queue\n");
 		AsyncWorkQueue work(4,1000);
 
+
 		// SETUP TRANSCEIVER
 		printf("Setup transceiver\n");
+		s_name = config.get("NodeName").string();
 		UDPTransceiver transceiver;
 		transceiver.setMulticastAddress(config.get("MulticastAddress").string());
 		transceiver.setPort(config.get("MulticastPort").uint32());
@@ -370,14 +396,32 @@ int main(int /*argc*/, char** /*argv*/)
 			if (cudaSuccess != rc) throw "CUDA ERROR";
 
 			// check escape pressed
-			if (display.events()) 
+			if (int e = display.events()) 
 			{
-				kinect.stop();
-				kinect.close();
-				display.cudaUnmap(stream);
-				cudaStreamDestroy(stream);
-				return 0;
+				if (e < 0)
+				{
+					if (!config.get("IsController").boolean()) 
+					{
+						if (s_started)	kinect.stop();
+						kinect.close();
+					}
+					display.cudaUnmap(stream);
+					cudaStreamDestroy(stream);
+					return 0;
+				}
+				switch (e)
+				{
+					case 'b':
+					case 'B':
+						transceiver.transmit("START", 5);
+						break;
+					case 'e':
+					case 'E':
+						transceiver.transmit("STOP", 4);
+						break;
+				}
 			}
+
 			usleep(1000);
 		}
 	}

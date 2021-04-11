@@ -325,8 +325,9 @@ int CudaDisplay::events()
 				if (27 == *text)
 				{
 					printf("Escape pressed\n");
-					return 1;
+					return -1;
 				}
+				else return *text;
 				printf("Keypress: %c (%d)\n", *text, *text);
 			}
 			break;

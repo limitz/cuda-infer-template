@@ -93,6 +93,7 @@ void Kinect::stop()
 
 Kinect::Capture* Kinect::capture()
 {
+	if (!_device) return nullptr;
 	k4a_capture_t capture;
 	int rc = k4a_device_get_capture(_device, &capture, 0);
 	switch (rc)

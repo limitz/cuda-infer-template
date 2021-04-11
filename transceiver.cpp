@@ -29,7 +29,7 @@ void UDPTransceiver::start()
 	rc = setsockopt(_listener, SOL_SOCKET, SO_REUSEADDR, (char*) &yes, sizeof(yes));
 	if (rc < 0) throw "Unable to set socket option REUSEADDR";
 
-	uint8_t loop = 1;
+	uint8_t loop = 0;
 	rc = setsockopt(_sender, IPPROTO_IP, IP_MULTICAST_LOOP, &loop, sizeof(yes));
 	if (rc < 0) throw "Unable to set socket option MULTICAST_LOOP";
 
