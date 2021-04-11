@@ -230,18 +230,18 @@ static void onTransceiverRx(UDPTransceiver* trx, const char* ip, const uint8_t* 
 {
 	Kinect* k = (Kinect*) param;
 	printf("[%s]: %s\n", ip, message);
-	char mstr = (char*) message;
+	char* mstr = (char*) message;
 
-	if (!strcmp(message, "PING"))
+	if (!strcmp(mstr, "PING"))
 	{
-		trx->transmit("PONG", 4);
+		trx->transmit(s_name, strlen(s_name));
 	}
-	if (!strcmp(message, "START"))
+	if (!strcmp(mstr, "START"))
 	{
 		if (!s_started) k->start();
 		s_started = true;
 	}
-	if (!strcmp(message, "STOP"))
+	if (!strcmp(mstr, "STOP"))
 	{
 		if (s_started) k->stop();
 		s_started = false;
