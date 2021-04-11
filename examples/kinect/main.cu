@@ -16,7 +16,6 @@
 #include <display.h>
 #include <pthread.h>
 #include <math.h>
-#include <inference.h>
 #include <operators.h>
 #include <asyncwork.h>
 #include <jpegcodec.h>
@@ -26,6 +25,18 @@
 
 #ifndef TITLE
 #define TITLE "CUDA INFERENCE DEMO"
+#endif
+
+#ifndef WIDTH
+#define WIDTH 1920
+#endif
+
+#ifndef HEIGHT
+#define HEIGHT 1080
+#endif
+
+#ifndef SCALE
+#define SCALE 2
 #endif
 
 #ifndef USE_NVJPEG
