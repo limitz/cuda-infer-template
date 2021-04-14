@@ -9,7 +9,7 @@
 #endif
 
 #ifndef SCALE
-#define SCALE 2
+#define SCALE 4
 #endif
 
 #include <stdio.h>
