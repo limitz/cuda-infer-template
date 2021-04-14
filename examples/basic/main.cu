@@ -207,7 +207,7 @@ int main(int /*argc*/, char** /*argv*/)
 		}
 	
 		// copy to output folder
-		const char* modelPath = "../../models/fcn_resnet101.960x540.engine";
+		const char* modelPath = "../../models/fcn_resnet101.480x270.engine";
 		printf("Loading \"%s\"", modelPath);
 		Model model(modelPath);
 
