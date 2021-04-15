@@ -66,6 +66,76 @@ void Kinect::start()
 	rc = k4a_device_get_calibration(_device, _config.depth_mode, _config.color_resolution, &_calibration);
 	if (K4A_RESULT_SUCCEEDED != rc) throw "Unable to calibrate device";
 
+	FILE* f = fopen("kinect.cal", "w");
+
+	k4a_calibration_camera_t depth = _calibration.depth_camera_calibration;
+	k4a_calibration_camera_t color = _calibration.color_camera_calibration;
+
+	fprintf(f,"color.resolution_width %d\n", color.resolution_width); 
+	fprintf(f,"color.resolution_height %d\n",color.resolution_height); 
+	fprintf(f,"color.metric_radius %f\n", color.metric_radius); 
+	fprintf(f,"color.intrinsics.cx %f\n", color.intrinsics.parameters.param.cx);
+	fprintf(f,"color.intrinsics.cy %f\n", color.intrinsics.parameters.param.cy);
+	fprintf(f,"color.intrinsics.fx %f\n", color.intrinsics.parameters.param.fx);
+	fprintf(f,"color.intrinsics.fy %f\n", color.intrinsics.parameters.param.fy);
+	fprintf(f,"color.intrinsics.k1 %f\n", color.intrinsics.parameters.param.k1);
+	fprintf(f,"color.intrinsics.k2 %f\n", color.intrinsics.parameters.param.k2);
+	fprintf(f,"color.intrinsics.k3 %f\n", color.intrinsics.parameters.param.k3);
+	fprintf(f,"color.intrinsics.k4 %f\n", color.intrinsics.parameters.param.k4);
+	fprintf(f,"color.intrinsics.k5 %f\n", color.intrinsics.parameters.param.k5);
+	fprintf(f,"color.intrinsics.k6 %f\n", color.intrinsics.parameters.param.k6);
+	fprintf(f,"color.intrinsics.codx %f\n", color.intrinsics.parameters.param.codx);
+	fprintf(f,"color.intrinsics.cody %f\n", color.intrinsics.parameters.param.cody);
+	fprintf(f,"color.intrinsics.p1 %f\n", color.intrinsics.parameters.param.p1);
+	fprintf(f,"color.intrinsics.p2 %f\n", color.intrinsics.parameters.param.p2);
+	fprintf(f,"color.intrinsics.metric_radius %f\n", color.intrinsics.parameters.param.metric_radius);
+	fprintf(f,"color.extrinsics.translation %f %f %f\n", 
+			color.extrinsics.translation[0],
+			color.extrinsics.translation[1],
+			color.extrinsics.translation[2]);
+	fprintf(f,"color.extrinsics.rotation %f %f %f %f %f %f %f %f %f\n", 
+			color.extrinsics.rotation[0],
+			color.extrinsics.rotation[1],
+			color.extrinsics.rotation[2],
+			color.extrinsics.rotation[3],
+			color.extrinsics.rotation[4],
+			color.extrinsics.rotation[5],
+			color.extrinsics.rotation[6],
+			color.extrinsics.rotation[7],
+			color.extrinsics.rotation[8]);
+	fprintf(f,"depth.resolution_width %d\n", depth.resolution_width); 
+	fprintf(f,"depth.resolution_height %d\n",depth.resolution_height); 
+	fprintf(f,"depth.metric_radius %f\n",depth.metric_radius); 
+	fprintf(f,"depth.intrinsics.cx %f\n", depth.intrinsics.parameters.param.cx);
+	fprintf(f,"depth.intrinsics.cy %f\n", depth.intrinsics.parameters.param.cy);
+	fprintf(f,"depth.intrinsics.fx %f\n", depth.intrinsics.parameters.param.fx);
+	fprintf(f,"depth.intrinsics.fy %f\n", depth.intrinsics.parameters.param.fy);
+	fprintf(f,"depth.intrinsics.k1 %f\n", depth.intrinsics.parameters.param.k1);
+	fprintf(f,"depth.intrinsics.k2 %f\n", depth.intrinsics.parameters.param.k2);
+	fprintf(f,"depth.intrinsics.k3 %f\n", depth.intrinsics.parameters.param.k3);
+	fprintf(f,"depth.intrinsics.k4 %f\n", depth.intrinsics.parameters.param.k4);
+	fprintf(f,"depth.intrinsics.k5 %f\n", depth.intrinsics.parameters.param.k5);
+	fprintf(f,"depth.intrinsics.k6 %f\n", depth.intrinsics.parameters.param.k6);
+	fprintf(f,"depth.intrinsics.codx %f\n", depth.intrinsics.parameters.param.codx);
+	fprintf(f,"depth.intrinsics.cody %f\n", depth.intrinsics.parameters.param.cody);
+	fprintf(f,"depth.intrinsics.p1 %f\n", depth.intrinsics.parameters.param.p1);
+	fprintf(f,"depth.intrinsics.p2 %f\n", depth.intrinsics.parameters.param.p2);
+	fprintf(f,"depth.intrinsics.metric_radius %f\n", depth.intrinsics.parameters.param.metric_radius);
+	fprintf(f,"depth.extrinsics.translation %f %f %f\n", 
+			depth.extrinsics.translation[0],
+			depth.extrinsics.translation[1],
+			depth.extrinsics.translation[2]);
+	fprintf(f,"depth.extrinsics.rotation %f %f %f %f %f %f %f %f %f\n", 
+			depth.extrinsics.rotation[0],
+			depth.extrinsics.rotation[1],
+			depth.extrinsics.rotation[2],
+			depth.extrinsics.rotation[3],
+			depth.extrinsics.rotation[4],
+			depth.extrinsics.rotation[5],
+			depth.extrinsics.rotation[6],
+			depth.extrinsics.rotation[7],
+			depth.extrinsics.rotation[8]);
+	fclose(f);
 	rc = k4a_device_set_color_control(_device, 
 			K4A_COLOR_CONTROL_EXPOSURE_TIME_ABSOLUTE, 
 			K4A_COLOR_CONTROL_MODE_AUTO, 0);

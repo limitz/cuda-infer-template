@@ -322,7 +322,7 @@ int main(int /*argc*/, char** /*argv*/)
 		kinect.setDepthMode(
 			config.get("KinectDepthModeNFOV").boolean(), 
 			config.get("KinectDepthModeBinned").boolean());
-		
+	
 		// SETUP ASYNCWORKQUEUE
 		printf("Setup async work queue\n");
 		AsyncWorkQueue work(4,1000);
