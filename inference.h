@@ -18,9 +18,11 @@
 
 #include <cuda_runtime_api.h>
 #include <NvInfer.h>
-#include <NvOnnxParser.h>
+#include <NvInferPlugin.h>
+#include <NvCaffeParser.h>
 
 using namespace nvinfer1;
+using namespace nvcaffeparser1;
 
 class Model : public ILogger
 {
@@ -50,7 +52,7 @@ public:
 
 	virtual void log(Severity level, const char* msg) override
 	{
-		printf("[L%d] %s", (int) level, msg);
+		printf("[L%d] %s\n", (int) level, msg);
 	}
 
 	struct
@@ -77,4 +79,8 @@ private:
 	ICudaEngine* _engine;
 	IRuntime*    _runtime;
 	IExecutionContext* _context;
+	INetworkDefinition* _network;
+	IBuilder* _builder;
+	IBuilderConfig* _config;
+	ICaffeParser* _parser;
 };

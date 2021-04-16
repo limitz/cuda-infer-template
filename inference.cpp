@@ -6,8 +6,12 @@ Model::Model(const char* filename)
 	boxesFrame.data = nullptr;
 	scoresFrame.data = nullptr;
 
+	_context = nullptr;
+	_engine = nullptr;
+	_runtime = nullptr;
+
 	load(filename);
-	setup();
+	//setup();
 }
 
 Model::~Model()
@@ -23,6 +27,7 @@ Model::~Model()
 
 void Model::load(const char* filename)
 {
+	/*
 	FILE* f = fopen(filename, "rb");
 	if (!f) throw "Unable to open model";
 
@@ -58,6 +63,39 @@ void Model::load(const char* filename)
 
 	_context = _engine->createExecutionContext();
 	if (!_context) throw "Unable to create execution context";
+	*/
+	initLibNvInferPlugins(this, "");
+
+	_builder = createInferBuilder(*this);
+	if (!_builder) throw "Unable to create builder";
+
+	_network = _builder->createNetwork();
+	if (!_network) throw "Unable to create network";
+
+	_config = _builder->createBuilderConfig();
+	if (!_config) throw "Unable to create config";
+
+	_parser = createCaffeParser();
+	if (!_parser) throw "Unable to create caffe parser";
+
+	const IBlobNameToTensor* blobNameToTensor = _parser->parse(
+			"../../models/ssd.prototxt", 
+			"../../models/ssd.caffemodel",
+			*_network,
+			DataType::kFLOAT);
+
+	_network->markOutput(*blobNameToTensor->find("keep_count"));
+	_network->markOutput(*blobNameToTensor->find("detection_out"));
+	_builder->setMaxBatchSize(1);
+	_config->setMaxWorkspaceSize(36 * 1000 * 1000);
+	//_config->setFlag(BuilderFlag::kFP16);
+	
+	_engine = _builder->buildEngineWithConfig(*_network, *_config);
+	if (!_engine) throw "Unable to build engine";
+
+	if (1 != _network->getNbInputs()) throw "Unexpected number of inputs";
+	dim.input = _network->getInput(0)->getDimensions();
+	if (3 != dim.input.nbDims) throw "Unexpected number of input dimensions";
 }
 
 void Model::setup()
@@ -99,7 +137,9 @@ void Model::setup()
 
 void Model::infer(cudaStream_t stream)
 {
+	/*
 	void* bindings[] = { inputFrame.data, boxesFrame.data, scoresFrame.data };
 	bool result = _context->enqueueV2(bindings, stream, nullptr);
 	if (!result) throw "Unable to enqueue inference";
+*/
 }
