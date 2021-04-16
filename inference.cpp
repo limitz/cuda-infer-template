@@ -4,21 +4,21 @@ Model::Model(const char* filename)
 {
 	inputFrame.data = nullptr;
 	boxesFrame.data = nullptr;
-	scoresFrame.data = nullptr;
+	keepCount.data = nullptr;
 
 	_context = nullptr;
 	_engine = nullptr;
 	_runtime = nullptr;
 
 	load(filename);
-	//setup();
+	setup();
 }
 
 Model::~Model()
 {
 	if (inputFrame.data) cudaFree(inputFrame.data);
 	if (boxesFrame.data) cudaFree(boxesFrame.data);
-	if (scoresFrame.data) cudaFree(scoresFrame.data);
+	if (keepCount.data) cudaFree(keepCount.data);
 
 	if (_context) _context->destroy();
 	if (_engine)  _engine->destroy();
@@ -96,50 +96,36 @@ void Model::load(const char* filename)
 	if (1 != _network->getNbInputs()) throw "Unexpected number of inputs";
 	dim.input = _network->getInput(0)->getDimensions();
 	if (3 != dim.input.nbDims) throw "Unexpected number of input dimensions";
+
+	_context = _engine->createExecutionContext();
+	if (!_context) throw "Unable to create execution context";
 }
 
 void Model::setup()
 {
 	int rc;
-	printf("Setting up model input\n");
-	idx.input = _engine->getBindingIndex("input");
-	if (idx.input < 0) throw "Unable to find model input";
-	if (DataType::kFLOAT != _engine->getBindingDataType(idx.input)) 
-		throw "Unexpected datatype for input";
-	dim.input = Dims4(1,3, HEIGHT/SCALE, WIDTH/SCALE);
-	_context->setBindingDimensions(idx.input, dim.input);
-
-	printf("Setting up model output\n");
-	idx.boxes = _engine->getBindingIndex("boxes");
-	if (idx.boxes < 0) throw "Unable to find model output boxes";
-	if (DataType::kFLOAT != _engine->getBindingDataType(idx.boxes))
-		throw "Unexpected datatype for output boxes";
-	dim.boxes = _context->getBindingDimensions(idx.boxes);
-
-	idx.scores = _engine->getBindingIndex("classes");
-	if (idx.scores < 0) throw "Unable to find model output boxes";
-	if (DataType::kFLOAT != _engine->getBindingDataType(idx.scores))
-		throw "Unexpected datatype for output scores";
-	dim.scores = _context->getBindingDimensions(idx.scores);
 	
-	boxesFrame.length = dim.boxes.d[0] * dim.boxes.d[1] * dim.boxes.d[2];
-	scoresFrame.length = dim.scores.d[0] * dim.scores.d[1] * dim.scores.d[2];
+	inputFrame.pitch = 300 * sizeof(float);
+	inputFrame.width = 300;
+	inputFrame.height = 300;
+
+	boxesFrame.length = 7 * 200;
+
 	printf("Creating model frames\n");
-	rc = cudaMalloc(&inputFrame.data, 3 * WIDTH/SCALE * HEIGHT/SCALE * sizeof(float));
+	rc = cudaMalloc(&inputFrame.data, 3 * 300 * 300 * sizeof(float));
 	if (cudaSuccess != rc) throw "Unable to allocate input frame device memory";
 
 	rc = cudaMalloc(&boxesFrame.data, boxesFrame.length * sizeof(float));
 	if (cudaSuccess != rc) throw "Unable to allocate boxes frame device memory";
 	
-	rc = cudaMalloc(&scoresFrame.data, scoresFrame.length * sizeof(float));
-	if (cudaSuccess != rc) throw "Unable to allocate scores frame device memory";
+	rc = cudaMalloc(&keepCount.data, sizeof(float));
+	if (cudaSuccess != rc) throw "Unable to allocate boxes frame device memory";
 }
 
 void Model::infer(cudaStream_t stream)
 {
-	/*
-	void* bindings[] = { inputFrame.data, boxesFrame.data, scoresFrame.data };
-	bool result = _context->enqueueV2(bindings, stream, nullptr);
+	void* bindings[] = { inputFrame.data, boxesFrame.data, keepCount.data };
+	bool result = _context->enqueue(1, bindings, stream, nullptr);
 	if (!result) throw "Unable to enqueue inference";
-*/
+
 }

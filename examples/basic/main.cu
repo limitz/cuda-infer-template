@@ -246,7 +246,7 @@ int main(int /*argc*/, char** /*argv*/)
 				display.CUDA.frame.width,
 				display.CUDA.frame.height
 			);
-			//model.infer(stream);
+			model.infer(stream);
 			/*
 			f_segment<<<gridSize, blockSize, 0, stream>>>(
 				display.CUDA.frame.data,
