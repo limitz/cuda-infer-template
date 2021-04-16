@@ -52,7 +52,7 @@ void f_jpeg(float4* out, int pitch_out, uint8_t* rgb, int width, int height)
 {
 	int x = (blockIdx.x * blockDim.x + threadIdx.x);
 	int y = (blockIdx.y * blockDim.y + threadIdx.y);
-	if (x >= width || y >= height) return;
+	if (x >= 900 || y >= 900) return;
 
 	out[y * pitch_out / sizeof(float4) + x] = make_float4(
 			rgb[0 + y * width * 3 + x * 3] / 255.0f,
@@ -65,14 +65,14 @@ void f_normalize(float* normalized, uint8_t* rgb, size_t width, size_t height)
 {
 	int x = (blockIdx.x * blockDim.x + threadIdx.x);
 	int y = (blockIdx.y * blockDim.y + threadIdx.y);
-	if (x >= width || y >= height) return;
-	size_t scstride = (width/SCALE) * (height/SCALE);
+	if (x >= 900 || y >= 900) return;
+	size_t scstride = 300 * 300;
 	size_t offset = y * width + x;
-	size_t soffset = (y / SCALE) * (width/SCALE) + x / SCALE;
+	size_t soffset = (y / 3) * (width/3) + x / 3;
 
-	normalized[soffset + 0 * scstride] = (rgb[offset*3 + 0]/255.0f - 0.485f) / (0.229f); 
-	normalized[soffset + 1 * scstride] = (rgb[offset*3 + 1]/255.0f - 0.456f) / (0.224f); 
-	normalized[soffset + 2 * scstride] = (rgb[offset*3 + 2]/255.0f - 0.406f) / (0.225f); 
+	normalized[soffset + 0 * scstride] = rgb[offset*3 + 2] - 104.0f; 
+	normalized[soffset + 1 * scstride] = rgb[offset*3 + 1] - 117.0f; 
+	normalized[soffset + 2 * scstride] = rgb[offset*3 + 0] - 123.0f; 
 }
 
 __global__
@@ -188,7 +188,7 @@ int main(int /*argc*/, char** /*argv*/)
 		rc = cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
 		if (cudaSuccess != rc) throw "Unable to create CUDA stream";
 
-		const char* jpegPath = "sheep.jpg";
+		const char* jpegPath = "showroom.jpg";
 		printf("Loading \"%s\"\n", jpegPath);
 		
 		JpegCodec codec;
@@ -231,14 +231,14 @@ int main(int /*argc*/, char** /*argv*/)
 				display.CUDA.frame.height
 			);
 
-			/*
+			
 			f_normalize<<<gridSize, blockSize, 0, stream>>>(
 				(float*)model.inputFrame.data,
 				imageBuffer,
 				display.CUDA.frame.width,
 				display.CUDA.frame.height
 			);
-			*/
+			
 			f_jpeg<<<gridSize, blockSize, 0, stream>>>(
 				display.CUDA.frame.data,
 				display.CUDA.frame.pitch,
@@ -256,12 +256,35 @@ int main(int /*argc*/, char** /*argv*/)
 				display.CUDA.frame.height
 			);
 			*/
+			int32_t keepCount = -1;
+			cudaMemcpyAsync(&keepCount, model.keepCount.data, sizeof(float), cudaMemcpyDeviceToHost, stream);
+			
+			float boxes[7 * 200];
+			cudaMemcpyAsync(&boxes, model.boxesFrame.data, model.boxesFrame.length, cudaMemcpyDeviceToHost, stream);
+
+			const char* classes[] = { "background", "plane", "bicycle", "bird", "boat", "bottle", "bus", "car", 
+				"cat","chair", "cow", "table", "dog", "horse", "motorbike", "person", "pottedplant", "sheep", 
+				"sofa","train", "tv" };
 
 			// copies the CUDA.frame.data to GL.pbaddr
 			// and unmaps the GL.pbo
 			display.cudaFinish(stream);
 			display.render(stream);
-			
+		
+			cudaStreamSynchronize(stream);
+			for (int i=0; i<keepCount; i++)
+			{
+				float* detection = boxes + i * 7;
+				const char* className = classes[(int)(detection[1])];
+				float confidence = detection[2];
+				float xmin = detection[3] * 900;
+				float ymin = detection[4] * 900;
+				float xmax = detection[5] * 900;
+				float ymax = detection[6] * 900;
+
+				if (confidence < 0.1) continue;
+				printf("%-15s %0.02f (%f,%f,%f,%f)\n", className, confidence, xmin, ymin, xmax, ymax);
+			}
 			rc = cudaGetLastError();
 			if (cudaSuccess != rc) throw "CUDA ERROR";
 
