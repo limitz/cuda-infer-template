@@ -22,7 +22,7 @@ import torch.nn as nn
 width = 1920
 height = 1080
 scale = 2
-model_load = ('pytorch/vision:v0.6.0', 'fcn_resnet101' )
+model_load = ('NVIDIA/DeepLearningExamples:torchhub', 'nvidia_ssd' )
 model_width = int(width / scale)
 model_height = int(height / scale)
 model_format = "{name}.{width}x{height}.{ext}"
@@ -34,12 +34,13 @@ engine_name = model_format.format(name = model_load[1], width = model_width, hei
 class fcn_resnet101(nn.Module):
     def __init__(self):
         super(fcn_resnet101, self).__init__()
-        self.model = torch.hub.load(model_load[0], model_load[1], pretrained=True)
+        self.model = torch.hub.load(model_load[0], model_load[1], pretrained=True, model_math='fp32')
 
     def forward(self, inputs):
         x = self.model(inputs) 
         #x = (x[0], torch.nn.functional.softmax(x[1], dim=2))
-        x = x['out'].argmax(1, keepdims=True)
+        #x = x['out'].argmax(1, keepdims=True)
+        print(x[0].shape);
         return x;
 
 model = fcn_resnet101()
@@ -49,7 +50,7 @@ torch.onnx.export(model, input_tensor, onnx_name,
     opset_version=12,
     do_constant_folding=True,
     input_names=["input"],
-    output_names=["output"],
+    output_names=["boxes","classes"],
     verbose=True)
 
 

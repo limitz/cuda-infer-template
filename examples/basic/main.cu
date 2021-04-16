@@ -207,7 +207,7 @@ int main(int /*argc*/, char** /*argv*/)
 		}
 	
 		// copy to output folder
-		const char* modelPath = "../../models/fcn_resnet101.960x540.engine";
+		const char* modelPath = "../../models/nvidia_ssd.960x540.engine";
 		printf("Loading \"%s\"", modelPath);
 		Model model(modelPath);
 
@@ -245,6 +245,7 @@ int main(int /*argc*/, char** /*argv*/)
 				display.CUDA.frame.height
 			);
 			model.infer(stream);
+			/*
 			f_segment<<<gridSize, blockSize, 0, stream>>>(
 				display.CUDA.frame.data,
 				display.CUDA.frame.pitch,
@@ -252,6 +253,7 @@ int main(int /*argc*/, char** /*argv*/)
 				display.CUDA.frame.width,
 				display.CUDA.frame.height
 			);
+			*/
 
 			// copies the CUDA.frame.data to GL.pbaddr
 			// and unmaps the GL.pbo

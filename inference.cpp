@@ -3,7 +3,8 @@
 Model::Model(const char* filename)
 {
 	inputFrame.data = nullptr;
-	outputFrame.data = nullptr;
+	boxesFrame.data = nullptr;
+	scoresFrame.data = nullptr;
 
 	load(filename);
 	setup();
@@ -12,7 +13,8 @@ Model::Model(const char* filename)
 Model::~Model()
 {
 	if (inputFrame.data) cudaFree(inputFrame.data);
-	if (outputFrame.data) cudaFree(outputFrame.data);
+	if (boxesFrame.data) cudaFree(boxesFrame.data);
+	if (scoresFrame.data) cudaFree(scoresFrame.data);
 
 	if (_context) _context->destroy();
 	if (_engine)  _engine->destroy();
@@ -70,23 +72,34 @@ void Model::setup()
 	_context->setBindingDimensions(idx.input, dim.input);
 
 	printf("Setting up model output\n");
-	idx.output = _engine->getBindingIndex("output");
-	if (idx.output < 0) throw "Unable to find model output";
-	if (DataType::kINT32 != _engine->getBindingDataType(idx.output))
-		throw "Unexpected datatype for output";
-	dim.output = _context->getBindingDimensions(idx.output);
+	idx.boxes = _engine->getBindingIndex("boxes");
+	if (idx.boxes < 0) throw "Unable to find model output boxes";
+	if (DataType::kFLOAT != _engine->getBindingDataType(idx.boxes))
+		throw "Unexpected datatype for output boxes";
+	dim.boxes = _context->getBindingDimensions(idx.boxes);
 
+	idx.scores = _engine->getBindingIndex("classes");
+	if (idx.scores < 0) throw "Unable to find model output boxes";
+	if (DataType::kFLOAT != _engine->getBindingDataType(idx.scores))
+		throw "Unexpected datatype for output scores";
+	dim.scores = _context->getBindingDimensions(idx.scores);
+	
+	boxesFrame.length = dim.boxes.d[0] * dim.boxes.d[1] * dim.boxes.d[2];
+	scoresFrame.length = dim.scores.d[0] * dim.scores.d[1] * dim.scores.d[2];
 	printf("Creating model frames\n");
 	rc = cudaMalloc(&inputFrame.data, 3 * WIDTH/SCALE * HEIGHT/SCALE * sizeof(float));
 	if (cudaSuccess != rc) throw "Unable to allocate input frame device memory";
 
-	rc = cudaMalloc(&outputFrame.data, 3 * WIDTH/SCALE * HEIGHT/SCALE * sizeof(int));
-	if (cudaSuccess != rc) throw "Unable to allocate input frame device memory";
+	rc = cudaMalloc(&boxesFrame.data, boxesFrame.length * sizeof(float));
+	if (cudaSuccess != rc) throw "Unable to allocate boxes frame device memory";
+	
+	rc = cudaMalloc(&scoresFrame.data, scoresFrame.length * sizeof(float));
+	if (cudaSuccess != rc) throw "Unable to allocate scores frame device memory";
 }
 
 void Model::infer(cudaStream_t stream)
 {
-	void* bindings[] = { inputFrame.data, outputFrame.data };
+	void* bindings[] = { inputFrame.data, boxesFrame.data, scoresFrame.data };
 	bool result = _context->enqueueV2(bindings, stream, nullptr);
 	if (!result) throw "Unable to enqueue inference";
 }
