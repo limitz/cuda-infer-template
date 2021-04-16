@@ -55,6 +55,6 @@ torch.onnx.export(model, input_tensor, onnx_name,
 
 
 os.system(
-        "trtexec --onnx={onnx} --saveEngine={engine} --optShapes=1x3x{height}x{width} --workspace=1024 --best"
+        "trtexec --onnx={onnx} --saveEngine={engine} --optShapes=1x3x{height}x{width} --workspace=128 --best"
         .format(onnx = onnx_name, engine = engine_name, width = model_width, height = model_height)
 );
