@@ -208,7 +208,7 @@ int main(int /*argc*/, char** /*argv*/)
 	
 		// copy to output folder
 		const char* modelPath = "../../models/nvidia_ssd.960x540.engine";
-		printf("Loading \"%s\"", modelPath);
+		printf("Loading \"%s\"\n", modelPath);
 		Model model(modelPath);
 
 		printf("Creating screen\n");
@@ -231,12 +231,14 @@ int main(int /*argc*/, char** /*argv*/)
 				display.CUDA.frame.height
 			);
 
+			/*
 			f_normalize<<<gridSize, blockSize, 0, stream>>>(
 				(float*)model.inputFrame.data,
 				imageBuffer,
 				display.CUDA.frame.width,
 				display.CUDA.frame.height
 			);
+			*/
 			f_jpeg<<<gridSize, blockSize, 0, stream>>>(
 				display.CUDA.frame.data,
 				display.CUDA.frame.pitch,
@@ -244,7 +246,7 @@ int main(int /*argc*/, char** /*argv*/)
 				display.CUDA.frame.width,
 				display.CUDA.frame.height
 			);
-			model.infer(stream);
+			//model.infer(stream);
 			/*
 			f_segment<<<gridSize, blockSize, 0, stream>>>(
 				display.CUDA.frame.data,
