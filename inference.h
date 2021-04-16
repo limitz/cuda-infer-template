@@ -44,11 +44,10 @@ public:
 		size_t length;
 	} boxesFrame;
 
-	struct 
+	struct
 	{
 		void* data;
-		size_t length;
-	} scoresFrame;
+	} keepCount;
 
 	virtual void log(Severity level, const char* msg) override
 	{
@@ -59,14 +58,12 @@ public:
 	{
 		Dims input;
 		Dims boxes;
-		Dims scores;
 	} dim;
 
 	struct
 	{
 		int input;
 		int boxes;
-		int scores;
 	} idx;
 
 	void infer(cudaStream_t);
