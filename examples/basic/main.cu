@@ -52,12 +52,12 @@ void f_jpeg(float4* out, int pitch_out, uint8_t* rgb, int width, int height)
 {
 	int x = (blockIdx.x * blockDim.x + threadIdx.x);
 	int y = (blockIdx.y * blockDim.y + threadIdx.y);
-	if (x >= 900 || y >= 900) return;
+	if (x >= 300 || y >= 300) return;
 
 	out[y * pitch_out / sizeof(float4) + x] = make_float4(
-			rgb[0 + y * width * 3 + x * 3] / 255.0f,
-			rgb[1 + y * width * 3 + x * 3] / 255.0f,
-			rgb[2 + y * width * 3 + x * 3] / 255.0f,
+			rgb[0 + y * 300 * 3 + x * 3] / 255.0f,
+			rgb[1 + y * 300 * 3 + x * 3] / 255.0f,
+			rgb[2 + y * 300 * 3 + x * 3] / 255.0f,
 			1);
 }
 __global__
@@ -65,10 +65,10 @@ void f_normalize(float* normalized, uint8_t* rgb, size_t width, size_t height)
 {
 	int x = (blockIdx.x * blockDim.x + threadIdx.x);
 	int y = (blockIdx.y * blockDim.y + threadIdx.y);
-	if (x >= 900 || y >= 900) return;
+	if (x >= 300 || y >= 300) return;
 	size_t scstride = 300 * 300;
-	size_t offset = y * width + x;
-	size_t soffset = (y / 3) * (width/3) + x / 3;
+	size_t offset = y * 300 + x;
+	size_t soffset = (y / 1) * (300/1) + x / 1;
 
 	normalized[soffset + 0 * scstride] = rgb[offset*3 + 2] - 104.0f; 
 	normalized[soffset + 1 * scstride] = rgb[offset*3 + 1] - 117.0f; 
@@ -188,13 +188,13 @@ int main(int /*argc*/, char** /*argv*/)
 		rc = cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
 		if (cudaSuccess != rc) throw "Unable to create CUDA stream";
 
-		const char* jpegPath = "showroom.jpg";
+		const char* jpegPath = "bus.jpeg";
 		printf("Loading \"%s\"\n", jpegPath);
 		
 		JpegCodec codec;
-		codec.prepare(WIDTH, HEIGHT, 3);
+		codec.prepare(300, 300, 3);
 		{
-			cudaMalloc(&imageBuffer, WIDTH * HEIGHT * 3);
+			cudaMalloc(&imageBuffer, 300 * 300 * 3);
 			
 			File jpeg;
 			jpeg.readAll(jpegPath);
@@ -272,6 +272,7 @@ int main(int /*argc*/, char** /*argv*/)
 			display.render(stream);
 		
 			cudaStreamSynchronize(stream);
+			printf("Detections:\n");
 			for (int i=0; i<keepCount; i++)
 			{
 				float* detection = boxes + i * 7;
