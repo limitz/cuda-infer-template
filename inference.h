@@ -1,11 +1,11 @@
 #pragma once
 
 #ifndef WIDTH
-#define WIDTH 1920
+#define WIDTH 1280
 #endif
 
 #ifndef HEIGHT
-#define HEIGHT 1080
+#define HEIGHT 720
 #endif
 
 #ifndef SCALE

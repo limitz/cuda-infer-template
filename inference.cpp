@@ -88,7 +88,7 @@ void Model::load(const char* filename)
 	_network->markOutput(*blobNameToTensor->find("detection_out"));
 	_builder->setMaxBatchSize(1);
 	_config->setMaxWorkspaceSize(36 * 1000 * 1000);
-	//_config->setFlag(BuilderFlag::kFP16);
+	_config->setFlag(BuilderFlag::kFP16);
 	
 	_engine = _builder->buildEngineWithConfig(*_network, *_config);
 	if (!_engine) throw "Unable to build engine";
