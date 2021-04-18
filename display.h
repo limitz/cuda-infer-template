@@ -54,6 +54,7 @@ public:
 		GLuint vao = 0;
 		GLuint pbo = 0;
 		GLuint vbo = 0;
+		
 		GLuint texture = 0;
 		GLuint program = 0;
 		cudaGraphicsResource* pbres = NULL;

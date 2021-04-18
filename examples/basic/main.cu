@@ -52,12 +52,12 @@ void f_jpeg(float4* out, int pitch_out, uint8_t* rgb, int width, int height)
 {
 	int x = (blockIdx.x * blockDim.x + threadIdx.x);
 	int y = (blockIdx.y * blockDim.y + threadIdx.y);
-	if (x >= 300 || y >= 300) return;
+	if (x >= 900 || y >= 900) return;
 
 	out[y * pitch_out / sizeof(float4) + x] = make_float4(
-			rgb[0 + y * 300 * 3 + x * 3] / 255.0f,
-			rgb[1 + y * 300 * 3 + x * 3] / 255.0f,
-			rgb[2 + y * 300 * 3 + x * 3] / 255.0f,
+			rgb[0 + y * 900 * 3 + x * 3] / 255.0f,
+			rgb[1 + y * 900 * 3 + x * 3] / 255.0f,
+			rgb[2 + y * 900 * 3 + x * 3] / 255.0f,
 			1);
 }
 __global__
@@ -65,10 +65,10 @@ void f_normalize(float* normalized, uint8_t* rgb, size_t width, size_t height)
 {
 	int x = (blockIdx.x * blockDim.x + threadIdx.x);
 	int y = (blockIdx.y * blockDim.y + threadIdx.y);
-	if (x >= 300 || y >= 300) return;
+	if (x >= 900 || y >= 900) return;
 	size_t scstride = 300 * 300;
-	size_t offset = y * 300 + x;
-	size_t soffset = (y / 1) * (300/1) + x / 1;
+	size_t offset = y * 900 + x;
+	size_t soffset = (y / 3) * (900/3) + x / 3;
 
 	normalized[soffset + 0 * scstride] = rgb[offset*3 + 2] - 104.0f; 
 	normalized[soffset + 1 * scstride] = rgb[offset*3 + 1] - 117.0f; 
@@ -76,14 +76,28 @@ void f_normalize(float* normalized, uint8_t* rgb, size_t width, size_t height)
 }
 
 __global__
-void f_segment(float4* out, int pitch_out, int* seg, int width, int height)
+void f_bbox(float4* out, int pitch_out, float* boxes, uint32_t* nboxes, int width, int height)
 {
 	int x = (blockIdx.x * blockDim.x + threadIdx.x);
 	int y = (blockIdx.y * blockDim.y + threadIdx.y);
 	if (x >= width || y >= height) return;
 
+	int classification = 0;
+	for (int i=0; i<*nboxes; i++)
+	{
+		float* box = boxes + i * 7;
+		if (box[2] < 0.8f || box[2] > 1.0) continue;
+		if (box[1] <= 0 || box[1] >= 21) continue;
+		float minx = box[3] * width;
+		float miny = box[4] * height;
+		float maxx = box[5] * width;
+		float maxy = box[6] * height;
+		if (x < minx || x > maxx || y < miny || y > maxy) continue;
+		classification = box[1];
+		break;
+	}
+
 	float alpha = 0.4;
-	int classification = seg[(y/SCALE) * (width/SCALE) + (x/SCALE)];
 	float4 color = classification ? make_float4(
 			alpha/2 + alpha/2 * __sinf((classification/20.0f+0.00f) * 2 * M_PI),
 			alpha/2 + alpha/2 * __sinf((classification/20.0f+0.33f) * 2 * M_PI),
@@ -93,6 +107,7 @@ void f_segment(float4* out, int pitch_out, int* seg, int width, int height)
 	int idx = y * pitch_out/sizeof(float4) + x;
 	out[idx] = out[idx] * (1-color.w) + color;
 }
+
 
 int smToCores(int major, int minor)
 {
@@ -188,13 +203,13 @@ int main(int /*argc*/, char** /*argv*/)
 		rc = cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
 		if (cudaSuccess != rc) throw "Unable to create CUDA stream";
 
-		const char* jpegPath = "bus.jpeg";
+		const char* jpegPath = "sheep900.jpg";
 		printf("Loading \"%s\"\n", jpegPath);
 		
 		JpegCodec codec;
-		codec.prepare(300, 300, 3);
+		codec.prepare(900, 900, 3);
 		{
-			cudaMalloc(&imageBuffer, 300 * 300 * 3);
+			cudaMalloc(&imageBuffer, 1920 * 1080 * 3);
 			
 			File jpeg;
 			jpeg.readAll(jpegPath);
@@ -256,36 +271,18 @@ int main(int /*argc*/, char** /*argv*/)
 				display.CUDA.frame.height
 			);
 			*/
-			int32_t keepCount = -1;
-			cudaMemcpyAsync(&keepCount, model.keepCount.data, sizeof(float), cudaMemcpyDeviceToHost, stream);
-			
-			float boxes[7 * 200];
-			cudaMemcpyAsync(&boxes, model.boxesFrame.data, model.boxesFrame.length, cudaMemcpyDeviceToHost, stream);
-
-			const char* classes[] = { "background", "plane", "bicycle", "bird", "boat", "bottle", "bus", "car", 
-				"cat","chair", "cow", "table", "dog", "horse", "motorbike", "person", "pottedplant", "sheep", 
-				"sofa","train", "tv" };
+			f_bbox<<<gridSize, blockSize, 0, stream>>>(
+				display.CUDA.frame.data,
+				display.CUDA.frame.pitch,
+				(float*) model.boxesFrame.data,
+				(uint32_t*) model.keepCount.data,
+				900,900);
 
 			// copies the CUDA.frame.data to GL.pbaddr
 			// and unmaps the GL.pbo
 			display.cudaFinish(stream);
 			display.render(stream);
 		
-			cudaStreamSynchronize(stream);
-			printf("Detections:\n");
-			for (int i=0; i<keepCount; i++)
-			{
-				float* detection = boxes + i * 7;
-				const char* className = classes[(int)(detection[1])];
-				float confidence = detection[2];
-				float xmin = detection[3] * 900;
-				float ymin = detection[4] * 900;
-				float xmax = detection[5] * 900;
-				float ymax = detection[6] * 900;
-
-				if (confidence < 0.1) continue;
-				printf("%-15s %0.02f (%f,%f,%f,%f)\n", className, confidence, xmin, ymin, xmax, ymax);
-			}
 			rc = cudaGetLastError();
 			if (cudaSuccess != rc) throw "CUDA ERROR";
 
