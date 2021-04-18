@@ -48,39 +48,45 @@ void f_test(float4* out, int pitch_out, int width, int height)
 
 // RGB interleaved as 3 byte tupels
 __global__
-void f_jpeg(float4* out, int pitch_out, uint8_t* rgb, int width, int height)
+void f_jpeg(float4* out, int pitch_out, uint8_t* rgb)
 {
 	int x = (blockIdx.x * blockDim.x + threadIdx.x);
 	int y = (blockIdx.y * blockDim.y + threadIdx.y);
-	if (x >= 900 || y >= 900) return;
+	if (x >= WIDTH || y >= HEIGHT) return;
 
 	out[y * pitch_out / sizeof(float4) + x] = make_float4(
-			rgb[0 + y * 900 * 3 + x * 3] / 255.0f,
-			rgb[1 + y * 900 * 3 + x * 3] / 255.0f,
-			rgb[2 + y * 900 * 3 + x * 3] / 255.0f,
+			rgb[0 + y * WIDTH * 3 + x * 3] / 255.0f,
+			rgb[1 + y * WIDTH * 3 + x * 3] / 255.0f,
+			rgb[2 + y * WIDTH * 3 + x * 3] / 255.0f,
 			1);
 }
+
+#define SDIV   (WIDTH / 300.0f)
 __global__
-void f_normalize(float* normalized, uint8_t* rgb, size_t width, size_t height)
+void f_normalize(float* normalized, uint8_t* rgb)
 {
 	int x = (blockIdx.x * blockDim.x + threadIdx.x);
 	int y = (blockIdx.y * blockDim.y + threadIdx.y);
-	if (x >= 900 || y >= 900) return;
-	size_t scstride = 300 * 300;
-	size_t offset = y * 900 + x;
-	size_t soffset = (y / 3) * (900/3) + x / 3;
+	if (x >= 300 || y >= 300) return;
+	int sx = (int) (x * SDIV);
+	int sy = (int) (y * SDIV);
+	bool valid = sx < WIDTH && sy < HEIGHT;
 
-	normalized[soffset + 0 * scstride] = rgb[offset*3 + 2] - 104.0f; 
-	normalized[soffset + 1 * scstride] = rgb[offset*3 + 1] - 117.0f; 
-	normalized[soffset + 2 * scstride] = rgb[offset*3 + 0] - 123.0f; 
+	size_t offset = sy * WIDTH + sx;
+	size_t scstride = 300 * 300;
+	size_t soffset = y * 300 + x;
+
+	normalized[soffset + 0 * scstride] = valid ? rgb[offset*3 + 2] - 104.0f : 0; 
+	normalized[soffset + 1 * scstride] = valid ? rgb[offset*3 + 1] - 117.0f : 0; 
+	normalized[soffset + 2 * scstride] = valid ? rgb[offset*3 + 0] - 123.0f : 0; 
 }
 
 __global__
-void f_bbox(float4* out, int pitch_out, float* boxes, uint32_t* nboxes, int width, int height)
+void f_bbox(float4* out, int pitch_out, float* boxes, uint32_t* nboxes)
 {
 	int x = (blockIdx.x * blockDim.x + threadIdx.x);
 	int y = (blockIdx.y * blockDim.y + threadIdx.y);
-	if (x >= width || y >= height) return;
+	if (x >= WIDTH || y >= HEIGHT) return;
 
 	int classification = 0;
 	for (int i=0; i<*nboxes; i++)
@@ -88,15 +94,23 @@ void f_bbox(float4* out, int pitch_out, float* boxes, uint32_t* nboxes, int widt
 		float* box = boxes + i * 7;
 		if (box[2] < 0.8f || box[2] > 1.0) continue;
 		if (box[1] <= 0 || box[1] >= 21) continue;
-		float minx = box[3] * width;
-		float miny = box[4] * height;
-		float maxx = box[5] * width;
-		float maxy = box[6] * height;
+		float minx = box[3] * WIDTH;
+		float miny = box[4] * WIDTH;
+		float maxx = box[5] * WIDTH;
+		float maxy = box[6] * WIDTH;
 		if (x < minx || x > maxx || y < miny || y > maxy) continue;
 		classification = box[1];
-		break;
-	}
+		float alpha = 0.4;
+		float4 color = classification ? make_float4(
+			alpha/2 + alpha/2 * __sinf((classification/20.0f+0.00f) * 2 * M_PI),
+			alpha/2 + alpha/2 * __sinf((classification/20.0f+0.33f) * 2 * M_PI),
+			alpha/2 + alpha/2 * __sinf((classification/20.0f+0.66f) * 2 * M_PI),
+			alpha) : make_float4(0,0,0,0);
 
+		int idx = y * pitch_out/sizeof(float4) + x;
+		out[idx] = out[idx] * (1-color.w) + color;
+	}
+#if 0
 	float alpha = 0.4;
 	float4 color = classification ? make_float4(
 			alpha/2 + alpha/2 * __sinf((classification/20.0f+0.00f) * 2 * M_PI),
@@ -106,6 +120,7 @@ void f_bbox(float4* out, int pitch_out, float* boxes, uint32_t* nboxes, int widt
 
 	int idx = y * pitch_out/sizeof(float4) + x;
 	out[idx] = out[idx] * (1-color.w) + color;
+#endif
 }
 
 
@@ -203,11 +218,11 @@ int main(int /*argc*/, char** /*argv*/)
 		rc = cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
 		if (cudaSuccess != rc) throw "Unable to create CUDA stream";
 
-		const char* jpegPath = "sheep900.jpg";
+		const char* jpegPath = "sheep.jpg";
 		printf("Loading \"%s\"\n", jpegPath);
 		
 		JpegCodec codec;
-		codec.prepare(900, 900, 3);
+		codec.prepare(1920, 1080, 3);
 		{
 			cudaMalloc(&imageBuffer, 1920 * 1080 * 3);
 			
@@ -236,6 +251,10 @@ int main(int /*argc*/, char** /*argv*/)
 			(HEIGHT + blockSize.y - 1) / blockSize.y 
 		}; 
 
+		dim3 gridSize300 = {
+			(300 + blockSize.x - 1) / blockSize.x,
+			(300 + blockSize.y - 1) / blockSize.y
+		};
 		display.cudaMap(stream);
 		while (true)
 		{
@@ -247,19 +266,15 @@ int main(int /*argc*/, char** /*argv*/)
 			);
 
 			
-			f_normalize<<<gridSize, blockSize, 0, stream>>>(
+			f_normalize<<<gridSize300, blockSize, 0, stream>>>(
 				(float*)model.inputFrame.data,
-				imageBuffer,
-				display.CUDA.frame.width,
-				display.CUDA.frame.height
+				imageBuffer
 			);
 			
 			f_jpeg<<<gridSize, blockSize, 0, stream>>>(
 				display.CUDA.frame.data,
 				display.CUDA.frame.pitch,
-				imageBuffer,
-				display.CUDA.frame.width,
-				display.CUDA.frame.height
+				imageBuffer
 			);
 			model.infer(stream);
 			/*
@@ -275,8 +290,7 @@ int main(int /*argc*/, char** /*argv*/)
 				display.CUDA.frame.data,
 				display.CUDA.frame.pitch,
 				(float*) model.boxesFrame.data,
-				(uint32_t*) model.keepCount.data,
-				900,900);
+				(uint32_t*) model.keepCount.data);
 
 			// copies the CUDA.frame.data to GL.pbaddr
 			// and unmaps the GL.pbo
