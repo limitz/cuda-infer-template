@@ -263,7 +263,6 @@ int main(int /*argc*/, char** /*argv*/)
 			cudaEvent_t start, stop;
 			cudaEventCreate(&start);
 			cudaEventCreate(&stop);
-			cudaEventRecord(start);
 #if 0
 			f_test<<<gridSize, blockSize, 0, stream>>>(
 				display.CUDA.frame.data,
@@ -283,7 +282,13 @@ int main(int /*argc*/, char** /*argv*/)
 				display.CUDA.frame.pitch,
 				imageBuffer
 			);
-			model.infer(stream);
+
+			cudaEventRecord(start);
+			for (int i=0; i<10; i++)
+			{
+				model.infer(stream);
+			}
+			cudaEventRecord(stop);
 			
 			f_bbox<<<gridSize, blockSize, 0, stream>>>(
 				display.CUDA.frame.data,
@@ -291,8 +296,6 @@ int main(int /*argc*/, char** /*argv*/)
 				(float*) model.boxesFrame.data,
 				(uint32_t*) model.keepCount.data);
 
-			cudaEventRecord(stop);
-			cudaEventSynchronize(stop);
 			// copies the CUDA.frame.data to GL.pbaddr
 			// and unmaps the GL.pbo
 			display.cudaFinish(stream);
@@ -302,8 +305,8 @@ int main(int /*argc*/, char** /*argv*/)
 			cudaEventElapsedTime(&ms, start, stop);
 			cudaEventDestroy(start);
 			cudaEventDestroy(stop);
-
-			printf("Time spend on the GPU: %0.02f ms\n", ms);
+			
+			printf("AVG inference time: %0.04f ms\n", ms/10.0f);
 			rc = cudaGetLastError();
 			if (cudaSuccess != rc) throw "CUDA ERROR";
 

@@ -12,6 +12,9 @@
 #include <jpeglib.h>
 #endif
 
+#define WIDTH 1280
+#define HEIGHT 720
+
 #include <display.h>
 #include <pthread.h>
 #include <math.h>
