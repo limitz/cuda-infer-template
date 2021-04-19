@@ -83,7 +83,7 @@ void f_normalize(float* normalized, uint8_t* rgb)
 	normalized[soffset +  90000] = rgb[offset + 1] - 117.0f; 
 	normalized[soffset + 180000] = rgb[offset + 0] - 123.0f; 
 }
-
+#define OVERLAY_BOXES
 __global__
 void f_bbox(float4* out, int pitch_out, float* boxes, uint32_t* nboxes)
 {
@@ -96,8 +96,8 @@ void f_bbox(float4* out, int pitch_out, float* boxes, uint32_t* nboxes)
 	for (int i=0; i<*nboxes; i++)
 	{
 		float* box = boxes + i * 7;
-		if (box[2] < 0.6f || box[2] > 1.0) continue;
-		if (box[1] <= 0 || box[1] >= 21) continue;
+		if (box[1] != 7 && box[1] != 15) continue;
+		if (box[2] < 0.6f || box[2] > 2.0) continue;
 		float minx = box[3] * WIDTH;
 		float miny = box[4] * WIDTH;
 		float maxx = box[5] * WIDTH;
