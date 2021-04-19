@@ -90,6 +90,13 @@ void Model::load(const char* filename)
 	_config->setMaxWorkspaceSize(36 * 1000 * 1000);
 	_config->setFlag(BuilderFlag::kFP16);
 	
+	if (false)
+	{
+		IInt8Calibrator* calibrator = new Int8Calibrator(1, 50);
+		_config->setFlag(BuilderFlag::kINT8);
+		_config->setInt8Calibrator(calibrator);
+	}
+
 	_engine = _builder->buildEngineWithConfig(*_network, *_config);
 	if (!_engine) throw "Unable to build engine";
 
@@ -128,4 +135,72 @@ void Model::infer(cudaStream_t stream)
 	bool result = _context->enqueue(1, bindings, stream, nullptr);
 	if (!result) throw "Unable to enqueue inference";
 
+}
+
+
+Model::Int8Calibrator::Int8Calibrator(size_t batchSize, size_t calibrationBatches)
+{
+	_calibrationBatches = calibrationBatches;
+	_batchSize = batchSize;
+	_batchAllocated = _batchSize * 300 * 300 * 3 * sizeof(float);
+	int rc = cudaMalloc(&_devmem, _batchAllocated);
+	if (cudaSuccess != rc) throw "Unable to allocate calibration memory";
+}
+
+
+int Model::Int8Calibrator::getBatchSize() const
+{ 
+	return _batchSize; 
+}
+
+
+bool Model::Int8Calibrator::getBatch(void* bindings[], const char* names[], int nbBindings)
+{
+	if (0 == _calibrationBatches--) return false;
+	
+	void* tmp = malloc(_batchAllocated);
+	cudaMemcpy(_devmem, tmp /* next batch */, _batchAllocated, cudaMemcpyHostToDevice);
+	free(tmp);
+	bindings[0] = _devmem;
+	return true;
+}
+
+const void* Model::Int8Calibrator::readCalibrationCache(size_t& length)
+{
+	FILE* f = fopen("entropy8.cal", "rb");
+	if (!f) return nullptr; //throw "Unable to open entropy input file";
+	
+	int rc = fread(&length, sizeof(size_t), 1, f);
+	if (ferror(f) || rc != 1) throw "Unable to read header from entropy input file";
+
+	void* result = malloc(length);
+	if (!result) throw "Unable to allocate entropy memory";
+
+	int read = 0;
+	while (read < length)
+	{
+		rc = fread(((uint8_t*)result) + read, 1, length - read, f);
+		if (ferror(f) || rc <= 0) throw "Unable to read entropy input file";
+		read += rc;
+	}
+	fclose(f);
+	return result;
+}
+		
+void Model::Int8Calibrator::writeCalibrationCache(const void* data, size_t length)
+{
+	FILE* f = fopen("entropy8.cal","wb");
+	if (!f) throw "Unable to open entropy output file";
+
+	int rc = fwrite(&length, sizeof(size_t), 1, f);
+	if (rc != 1) "Unable to write header to entropy output file";
+
+	int written = 0;
+	while (written < length)
+	{
+		rc = fwrite(((uint8_t*)data) + written, 1, length - written, f);
+		if (ferror(f) || rc <= 0) throw "Unable to write entropy output file";
+		written += rc;
+	}
+	fclose(f);
 }

@@ -56,6 +56,22 @@ public:
 
 	void infer(cudaStream_t);
 
+	class Int8Calibrator : public IInt8EntropyCalibrator2
+	{
+	public:
+		Int8Calibrator(size_t batchSize, size_t calibrationBatches);
+
+		int getBatchSize() const override;
+		bool getBatch(void* bindings[], const char* names[], int nbBindings) override;
+		const void* readCalibrationCache(size_t& length) override;
+		void writeCalibrationCache(const void* data, size_t length) override;
+	private:
+		size_t _calibrationBatches;
+		size_t _batchSize;
+		size_t _batchAllocated;
+		void* _devmem;
+	};
+
 protected:
 	void load(const char* filename);
 	void setup();
