@@ -1,6 +1,6 @@
 #include "inference.h"
 
-Model::Model(const char* filename)
+Model::Model(const char* filename, const char* prototxt, const char* caffemodel)
 {
 	inputFrame.data = nullptr;
 	boxesFrame.data = nullptr;
@@ -10,7 +10,7 @@ Model::Model(const char* filename)
 	_engine = nullptr;
 	_runtime = nullptr;
 
-	load(filename);
+	load(filename, prototxt, caffemodel);
 	setup();
 }
 
@@ -20,92 +20,129 @@ Model::~Model()
 	if (boxesFrame.data) cudaFree(boxesFrame.data);
 	if (keepCount.data) cudaFree(keepCount.data);
 
+	if (_network) _network->destroy();
+	if (_config)  _config->destroy();
+	if (_builder) _builder->destroy();
+	if (_parser) _parser->destroy();
 	if (_context) _context->destroy();
 	if (_engine)  _engine->destroy();
 	if (_runtime) _runtime->destroy();
 }
 
-void Model::load(const char* filename)
+void Model::load(const char* filename, const char* prototxt, const char* caffemodel)
 {
-	/*
-	FILE* f = fopen(filename, "rb");
-	if (!f) throw "Unable to open model";
-
-	uint8_t* data = nullptr;
-	size_t capacity = 0;
-	size_t read=0;
-	size_t incr = 1<<20;
-
-	while (!feof(f))
-	{
-		if (capacity <= read)
-		{
-			capacity += incr;
-			uint8_t* tmp = data;
-			data = (uint8_t*) realloc(data, capacity);
-			if (!data)
-			{
-				data = tmp;
-				capacity -= incr;
-				throw "Unable to reallocate model data";
-			}
-		}
-		size_t r = fread(data + read, 1, capacity-read, f);
-		if (r <= 0) throw "Error reading model data"; 
-		read += r;
-	}
-
-	_runtime = createInferRuntime(*this);
-	if (!_runtime) throw "Unable to create runtime";
-
-	_engine = _runtime->deserializeCudaEngine(data, read, nullptr);
-	if (!_engine) throw "Unable to deserialize engine";
-
-	_context = _engine->createExecutionContext();
-	if (!_context) throw "Unable to create execution context";
-	*/
+	int rc;
+		
 	initLibNvInferPlugins(this, "");
+	
+	FILE* f = fopen(filename, "rb");
+	if (f)
+	{
+		printf("Found serialized engine %s\n", filename);
 
-	_builder = createInferBuilder(*this);
-	if (!_builder) throw "Unable to create builder";
+		uint8_t* data = nullptr;
+		size_t capacity = 0;
+		size_t read=0;
+		size_t incr = 1<<20;
 
-	_network = _builder->createNetwork();
-	if (!_network) throw "Unable to create network";
+		while (!feof(f))
+		{
+			if (capacity <= read)
+			{
+				capacity += incr;
+				uint8_t* tmp = data;
+				data = (uint8_t*) realloc(data, capacity);
+				if (!data)
+				{
+					data = tmp;
+					capacity -= incr;
+					fclose(f);
+					throw "Unable to reallocate model data";
+				}
+			}
+			rc = fread(data + read, 1, capacity-read, f);
+			if (rc <= 0) 
+			{
+				fclose(f);
+				throw "Error reading model data"; 
+			}
+			read += rc;
+		}
+		fclose(f);
 
-	_config = _builder->createBuilderConfig();
-	if (!_config) throw "Unable to create config";
+		_runtime = createInferRuntime(*this);
+		if (!_runtime) throw "Unable to create runtime";
 
-	_parser = createCaffeParser();
-	if (!_parser) throw "Unable to create caffe parser";
+		_engine = _runtime->deserializeCudaEngine(data, read, nullptr);
+		if (!_engine) throw "Unable to deserialize engine";
 
-	const IBlobNameToTensor* blobNameToTensor = _parser->parse(
-			"../../models/ssd.prototxt", 
-			"../../models/ssd.caffemodel",
+		_context = _engine->createExecutionContext();
+		if (!_context) throw "Unable to create execution context";
+	}
+	else
+	{
+
+		_builder = createInferBuilder(*this);
+		if (!_builder) throw "Unable to create builder";
+
+		_network = _builder->createNetwork();
+		if (!_network) throw "Unable to create network";
+
+		_config = _builder->createBuilderConfig();
+		if (!_config) throw "Unable to create config";
+
+		_parser = createCaffeParser();
+		if (!_parser) throw "Unable to create caffe parser";
+
+		const IBlobNameToTensor* blobNameToTensor = _parser->parse(
+			prototxt, 
+			caffemodel,
 			*_network,
 			DataType::kFLOAT);
 
-	_network->markOutput(*blobNameToTensor->find("keep_count"));
-	_network->markOutput(*blobNameToTensor->find("detection_out"));
-	_builder->setMaxBatchSize(1);
-	_config->setMaxWorkspaceSize(36 * 1000 * 1000);
-	_config->setFlag(BuilderFlag::kFP16);
+		_network->markOutput(*blobNameToTensor->find("keep_count"));
+		_network->markOutput(*blobNameToTensor->find("detection_out"));
+		_builder->setMaxBatchSize(1);
+		_config->setMaxWorkspaceSize(36 * 1000 * 1000);
+		_config->setFlag(BuilderFlag::kFP16);
 	
-	if (false)
-	{
-		IInt8Calibrator* calibrator = new Int8Calibrator(1, 50);
-		_config->setFlag(BuilderFlag::kINT8);
-		_config->setInt8Calibrator(calibrator);
+		if (false)
+		{
+			IInt8Calibrator* calibrator = new Int8Calibrator(1, 50);
+			_config->setFlag(BuilderFlag::kINT8);
+			_config->setInt8Calibrator(calibrator);
+		}
+
+		_engine = _builder->buildEngineWithConfig(*_network, *_config);
+		if (!_engine) throw "Unable to build engine";
+
+		f = fopen(filename, "wb");
+		if (f)
+		{
+			IHostMemory* serialized = _engine->serialize();
+			size_t written = 0;
+			while (written < serialized->size())
+			{
+				rc = fwrite(((uint8_t*)serialized->data()) + written, 1, serialized->size() - written, f);
+				if (ferror(f) || rc <= 0) throw "Unable to write serialized engine to file";
+				written += rc;
+			}
+			printf("Successfully stored serialized engine\n");
+			fclose(f);
+			serialized->destroy();
+		}
+		else
+		{
+			fprintf(stderr, "Warning: unable to save serialized engine");
+		}
+		
+		if (1 != _network->getNbInputs()) throw "Unexpected number of inputs";
+		dim.input = _network->getInput(0)->getDimensions();
+		if (3 != dim.input.nbDims) throw "Unexpected number of input dimensions";
+
+		_context = _engine->createExecutionContext();
+		if (!_context) throw "Unable to create execution context";
 	}
-
-	_engine = _builder->buildEngineWithConfig(*_network, *_config);
-	if (!_engine) throw "Unable to build engine";
-
-	if (1 != _network->getNbInputs()) throw "Unexpected number of inputs";
-	dim.input = _network->getInput(0)->getDimensions();
-	if (3 != dim.input.nbDims) throw "Unexpected number of input dimensions";
-
-	_context = _engine->createExecutionContext();
-	if (!_context) throw "Unable to create execution context";
 }
 
 void Model::setup()

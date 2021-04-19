@@ -239,9 +239,12 @@ int main(int /*argc*/, char** /*argv*/)
 		}
 	
 		// copy to output folder
-		const char* modelPath = "../../models/nvidia_ssd.960x540.engine";
+		const char* modelPath = "../../models/ssd.engine";
+		const char* prototxt  = "../../models/ssd.prototxt";
+		const char* caffemodel= "../../models/ssd.caffemodel";
+
 		printf("Loading \"%s\"\n", modelPath);
-		Model model(modelPath);
+		Model model(modelPath, prototxt, caffemodel);
 
 		printf("Creating screen\n");
 		CudaDisplay display(TITLE, WIDTH, HEIGHT); 
