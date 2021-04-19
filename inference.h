@@ -15,7 +15,7 @@ using namespace nvcaffeparser1;
 class Model : public ILogger
 {
 public:
-	Model(const char* filename);
+	Model(const char* filename, const char* prototxt, const char* caffemodel);
 	~Model();
 
 	struct 
@@ -73,7 +73,7 @@ public:
 	};
 
 protected:
-	void load(const char* filename);
+	void load(const char* filename, const char* prototxt, const char* caffemodel);
 	void setup();
 
 private:	
