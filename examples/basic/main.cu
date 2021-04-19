@@ -1,5 +1,4 @@
 #include <cuda_runtime.h>
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,6 +10,9 @@
 #else
 #include <jpeglib.h>
 #endif
+
+#define WIDTH 1920
+#define HEIGHT 1080
 
 #include <display.h>
 #include <pthread.h>
@@ -258,13 +260,18 @@ int main(int /*argc*/, char** /*argv*/)
 		display.cudaMap(stream);
 		while (true)
 		{
+			cudaEvent_t start, stop;
+			cudaEventCreate(&start);
+			cudaEventCreate(&stop);
+			cudaEventRecord(start);
+#if 0
 			f_test<<<gridSize, blockSize, 0, stream>>>(
 				display.CUDA.frame.data,
 				display.CUDA.frame.pitch,
 				display.CUDA.frame.width,
 				display.CUDA.frame.height
 			);
-
+#endif
 			
 			f_normalize<<<gridSize300, blockSize, 0, stream>>>(
 				(float*)model.inputFrame.data,
@@ -277,26 +284,26 @@ int main(int /*argc*/, char** /*argv*/)
 				imageBuffer
 			);
 			model.infer(stream);
-			/*
-			f_segment<<<gridSize, blockSize, 0, stream>>>(
-				display.CUDA.frame.data,
-				display.CUDA.frame.pitch,
-				(int*)model.outputFrame.data,
-				display.CUDA.frame.width,
-				display.CUDA.frame.height
-			);
-			*/
+			
 			f_bbox<<<gridSize, blockSize, 0, stream>>>(
 				display.CUDA.frame.data,
 				display.CUDA.frame.pitch,
 				(float*) model.boxesFrame.data,
 				(uint32_t*) model.keepCount.data);
 
+			cudaEventRecord(stop);
+			cudaEventSynchronize(stop);
 			// copies the CUDA.frame.data to GL.pbaddr
 			// and unmaps the GL.pbo
 			display.cudaFinish(stream);
 			display.render(stream);
 		
+			float ms;
+			cudaEventElapsedTime(&ms, start, stop);
+			cudaEventDestroy(start);
+			cudaEventDestroy(stop);
+
+			printf("Time spend on the GPU: %0.02f ms\n", ms);
 			rc = cudaGetLastError();
 			if (cudaSuccess != rc) throw "CUDA ERROR";
 
