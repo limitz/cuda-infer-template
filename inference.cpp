@@ -9,6 +9,10 @@ Model::Model(const char* filename, const char* prototxt, const char* caffemodel)
 	_context = nullptr;
 	_engine = nullptr;
 	_runtime = nullptr;
+	_network = nullptr;
+	_config = nullptr;
+	_builder = nullptr;
+	_parser = nullptr;
 
 	load(filename, prototxt, caffemodel);
 	setup();
