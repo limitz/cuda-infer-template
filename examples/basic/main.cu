@@ -1,5 +1,4 @@
 #include <cuda_runtime.h>
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,6 +10,9 @@
 #else
 #include <jpeglib.h>
 #endif
+
+#define WIDTH 1920
+#define HEIGHT 1080
 
 #include <display.h>
 #include <pthread.h>
@@ -48,42 +50,70 @@ void f_test(float4* out, int pitch_out, int width, int height)
 
 // RGB interleaved as 3 byte tupels
 __global__
-void f_jpeg(float4* out, int pitch_out, uint8_t* rgb, int width, int height)
+void f_jpeg(float4* out, int pitch_out, uint8_t* rgb)
 {
 	int x = (blockIdx.x * blockDim.x + threadIdx.x);
 	int y = (blockIdx.y * blockDim.y + threadIdx.y);
-	if (x >= width || y >= height) return;
+	if (x >= WIDTH || y >= HEIGHT) return;
 
 	out[y * pitch_out / sizeof(float4) + x] = make_float4(
-			rgb[0 + y * width * 3 + x * 3] / 255.0f,
-			rgb[1 + y * width * 3 + x * 3] / 255.0f,
-			rgb[2 + y * width * 3 + x * 3] / 255.0f,
+			rgb[0 + y * WIDTH * 3 + x * 3] / 255.0f,
+			rgb[1 + y * WIDTH * 3 + x * 3] / 255.0f,
+			rgb[2 + y * WIDTH * 3 + x * 3] / 255.0f,
 			1);
 }
+
+#define SDIV   (WIDTH / 300.0f)
 __global__
-void f_normalize(float* normalized, uint8_t* rgb, size_t width, size_t height)
+void f_normalize(float* normalized, uint8_t* rgb)
 {
 	int x = (blockIdx.x * blockDim.x + threadIdx.x);
 	int y = (blockIdx.y * blockDim.y + threadIdx.y);
-	if (x >= width || y >= height) return;
-	size_t scstride = (width/SCALE) * (height/SCALE);
-	size_t offset = y * width + x;
-	size_t soffset = (y / SCALE) * (width/SCALE) + x / SCALE;
+	if (x >= 300 || y >= 300) return;
+	int sx = (int) (x * SDIV);
+	int sy = (int) (y * SDIV);
+	bool valid = sx < WIDTH && sy < HEIGHT;
 
-	normalized[soffset + 0 * scstride] = (rgb[offset*3 + 0]/255.0f - 0.485f) / (0.229f); 
-	normalized[soffset + 1 * scstride] = (rgb[offset*3 + 1]/255.0f - 0.456f) / (0.224f); 
-	normalized[soffset + 2 * scstride] = (rgb[offset*3 + 2]/255.0f - 0.406f) / (0.225f); 
+	size_t offset = sy * WIDTH + sx;
+	size_t scstride = 300 * 300;
+	size_t soffset = y * 300 + x;
+
+	normalized[soffset + 0 * scstride] = valid ? rgb[offset*3 + 2] - 104.0f : 0; 
+	normalized[soffset + 1 * scstride] = valid ? rgb[offset*3 + 1] - 117.0f : 0; 
+	normalized[soffset + 2 * scstride] = valid ? rgb[offset*3 + 0] - 123.0f : 0; 
 }
 
 __global__
-void f_segment(float4* out, int pitch_out, int* seg, int width, int height)
+void f_bbox(float4* out, int pitch_out, float* boxes, uint32_t* nboxes)
 {
 	int x = (blockIdx.x * blockDim.x + threadIdx.x);
 	int y = (blockIdx.y * blockDim.y + threadIdx.y);
-	if (x >= width || y >= height) return;
+	if (x >= WIDTH || y >= HEIGHT) return;
 
+	int classification = 0;
+	for (int i=0; i<*nboxes; i++)
+	{
+		float* box = boxes + i * 7;
+		if (box[2] < 0.8f || box[2] > 1.0) continue;
+		if (box[1] <= 0 || box[1] >= 21) continue;
+		float minx = box[3] * WIDTH;
+		float miny = box[4] * WIDTH;
+		float maxx = box[5] * WIDTH;
+		float maxy = box[6] * WIDTH;
+		if (x < minx || x > maxx || y < miny || y > maxy) continue;
+		classification = box[1];
+		float alpha = 0.4;
+		float4 color = classification ? make_float4(
+			alpha/2 + alpha/2 * __sinf((classification/20.0f+0.00f) * 2 * M_PI),
+			alpha/2 + alpha/2 * __sinf((classification/20.0f+0.33f) * 2 * M_PI),
+			alpha/2 + alpha/2 * __sinf((classification/20.0f+0.66f) * 2 * M_PI),
+			alpha) : make_float4(0,0,0,0);
+
+		int idx = y * pitch_out/sizeof(float4) + x;
+		out[idx] = out[idx] * (1-color.w) + color;
+	}
+#if 0
 	float alpha = 0.4;
-	int classification = seg[(y/SCALE) * (width/SCALE) + (x/SCALE)];
 	float4 color = classification ? make_float4(
 			alpha/2 + alpha/2 * __sinf((classification/20.0f+0.00f) * 2 * M_PI),
 			alpha/2 + alpha/2 * __sinf((classification/20.0f+0.33f) * 2 * M_PI),
@@ -92,7 +122,9 @@ void f_segment(float4* out, int pitch_out, int* seg, int width, int height)
 
 	int idx = y * pitch_out/sizeof(float4) + x;
 	out[idx] = out[idx] * (1-color.w) + color;
+#endif
 }
+
 
 int smToCores(int major, int minor)
 {
@@ -192,9 +224,9 @@ int main(int /*argc*/, char** /*argv*/)
 		printf("Loading \"%s\"\n", jpegPath);
 		
 		JpegCodec codec;
-		codec.prepare(WIDTH, HEIGHT, 3);
+		codec.prepare(1920, 1080, 3);
 		{
-			cudaMalloc(&imageBuffer, WIDTH * HEIGHT * 3);
+			cudaMalloc(&imageBuffer, 1920 * 1080 * 3);
 			
 			File jpeg;
 			jpeg.readAll(jpegPath);
@@ -207,9 +239,12 @@ int main(int /*argc*/, char** /*argv*/)
 		}
 	
 		// copy to output folder
-		const char* modelPath = "../../models/fcn_resnet101.960x540.engine";
-		printf("Loading \"%s\"", modelPath);
-		Model model(modelPath);
+		const char* modelPath = "../../models/ssd.engine";
+		const char* prototxt  = "../../models/ssd.prototxt";
+		const char* caffemodel= "../../models/ssd.caffemodel";
+
+		printf("Loading \"%s\"\n", modelPath);
+		Model model(modelPath, prototxt, caffemodel);
 
 		printf("Creating screen\n");
 		CudaDisplay display(TITLE, WIDTH, HEIGHT); 
@@ -221,43 +256,60 @@ int main(int /*argc*/, char** /*argv*/)
 			(HEIGHT + blockSize.y - 1) / blockSize.y 
 		}; 
 
+		dim3 gridSize300 = {
+			(300 + blockSize.x - 1) / blockSize.x,
+			(300 + blockSize.y - 1) / blockSize.y
+		};
 		display.cudaMap(stream);
 		while (true)
 		{
+			cudaEvent_t start, stop;
+			cudaEventCreate(&start);
+			cudaEventCreate(&stop);
+#if 0
 			f_test<<<gridSize, blockSize, 0, stream>>>(
 				display.CUDA.frame.data,
 				display.CUDA.frame.pitch,
 				display.CUDA.frame.width,
 				display.CUDA.frame.height
 			);
-
-			f_normalize<<<gridSize, blockSize, 0, stream>>>(
+#endif
+			
+			f_normalize<<<gridSize300, blockSize, 0, stream>>>(
 				(float*)model.inputFrame.data,
-				imageBuffer,
-				display.CUDA.frame.width,
-				display.CUDA.frame.height
+				imageBuffer
 			);
+			
 			f_jpeg<<<gridSize, blockSize, 0, stream>>>(
 				display.CUDA.frame.data,
 				display.CUDA.frame.pitch,
-				imageBuffer,
-				display.CUDA.frame.width,
-				display.CUDA.frame.height
+				imageBuffer
 			);
-			model.infer(stream);
-			f_segment<<<gridSize, blockSize, 0, stream>>>(
+
+			cudaEventRecord(start);
+			for (int i=0; i<10; i++)
+			{
+				model.infer(stream);
+			}
+			cudaEventRecord(stop);
+			
+			f_bbox<<<gridSize, blockSize, 0, stream>>>(
 				display.CUDA.frame.data,
 				display.CUDA.frame.pitch,
-				(int*)model.outputFrame.data,
-				display.CUDA.frame.width,
-				display.CUDA.frame.height
-			);
+				(float*) model.boxesFrame.data,
+				(uint32_t*) model.keepCount.data);
 
 			// copies the CUDA.frame.data to GL.pbaddr
 			// and unmaps the GL.pbo
 			display.cudaFinish(stream);
 			display.render(stream);
+		
+			float ms;
+			cudaEventElapsedTime(&ms, start, stop);
+			cudaEventDestroy(start);
+			cudaEventDestroy(stop);
 			
+			printf("AVG inference time: %0.04f ms\n", ms/10.0f);
 			rc = cudaGetLastError();
 			if (cudaSuccess != rc) throw "CUDA ERROR";
 

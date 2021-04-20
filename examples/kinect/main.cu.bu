@@ -12,9 +12,7 @@
 #include <jpeglib.h>
 #endif
 
-#define WIDTH 1280
-#define HEIGHT 720
-
+#include <kinect.h>
 #include <display.h>
 #include <pthread.h>
 #include <math.h>
@@ -23,7 +21,6 @@
 #include <asyncwork.h>
 #include <jpegcodec.h>
 #include <file.h>
-#include <kinect.h>
 #include <config.h>
 
 #ifndef TITLE
@@ -53,82 +50,51 @@ void f_test(float4* out, int pitch_out, int width, int height)
 
 // RGB interleaved as 3 byte tupels
 __global__
-void f_jpeg(float4* out, int pitch_out, uint8_t* rgb)
+void f_jpeg(float4* out, int pitch_out, uint8_t* rgb, int width, int height)
 {
 	int x = (blockIdx.x * blockDim.x + threadIdx.x);
 	int y = (blockIdx.y * blockDim.y + threadIdx.y);
-	if (x >= WIDTH || y >= HEIGHT) return;
+	if (x >= width || y >= height) return;
 
-	int offset = (y * WIDTH + x) * 3;
 	out[y * pitch_out / sizeof(float4) + x] = make_float4(
-			rgb[0 + offset] / 255.0f,
-			rgb[1 + offset] / 255.0f,
-			rgb[2 + offset] / 255.0f,
+			rgb[0 + y * width * 3 + x * 3] / 255.0f,
+			rgb[1 + y * width * 3 + x * 3] / 255.0f,
+			rgb[2 + y * width * 3 + x * 3] / 255.0f,
 			1);
 }
-
-#define SDIV   (WIDTH / 300.0f)
 __global__
-void f_normalize(float* normalized, uint8_t* rgb)
+void f_normalize(float* normalized, uint8_t* rgb, size_t width, size_t height)
 {
 	int x = (blockIdx.x * blockDim.x + threadIdx.x);
 	int y = (blockIdx.y * blockDim.y + threadIdx.y);
-	if (x >= 300 || y >= 300) return;
+	if (x >= width || y >= height) return;
+	size_t scstride = (width/SCALE) * (height/SCALE);
+	size_t offset = y * width + x;
+	size_t soffset = (y / SCALE) * (width/SCALE) + x / SCALE;
 
-	int sx = (int) (x * SDIV);
-	int sy = (int) (y * SDIV);
-	if (sx >= WIDTH || sy >= HEIGHT) return;
-
-	size_t offset = (sy * WIDTH + sx) * 3;
-	size_t soffset = y * 300 + x;
-
-	normalized[soffset +      0] = rgb[offset + 2] - 104.0f; 
-	normalized[soffset +  90000] = rgb[offset + 1] - 117.0f; 
-	normalized[soffset + 180000] = rgb[offset + 0] - 123.0f; 
+	normalized[soffset + 0 * scstride] = (rgb[offset*3 + 0]/255.0f - 0.485f) / (0.229f); 
+	normalized[soffset + 1 * scstride] = (rgb[offset*3 + 1]/255.0f - 0.456f) / (0.224f); 
+	normalized[soffset + 2 * scstride] = (rgb[offset*3 + 2]/255.0f - 0.406f) / (0.225f); 
 }
-#define OVERLAY_BOXES
+
 __global__
-void f_bbox(float4* out, int pitch_out, float* boxes, uint32_t* nboxes)
+void f_segment(float4* out, int pitch_out, int* seg, int width, int height)
 {
 	int x = (blockIdx.x * blockDim.x + threadIdx.x);
 	int y = (blockIdx.y * blockDim.y + threadIdx.y);
-	if (x >= WIDTH || y >= HEIGHT) return;
-	int idx = y * pitch_out/sizeof(float4) + x;
+	if (x >= width || y >= height) return;
 
-	float classification = 0;
-	for (int i=0; i<*nboxes; i++)
-	{
-		float* box = boxes + i * 7;
-		if (box[1] != 7 && box[1] != 15) continue;
-		if (box[2] < 0.6f || box[2] > 2.0) continue;
-		float minx = box[3] * WIDTH;
-		float miny = box[4] * WIDTH;
-		float maxx = box[5] * WIDTH;
-		float maxy = box[6] * WIDTH;
-		if (x < minx || x > maxx || y < miny || y > maxy) continue;
-		classification = box[1] / 20.0f;
-#ifdef OVERLAY_BOXES
-		float4 color = classification ? make_float4(
-			0.2 + 0.2 * __sinf((classification+0.00f) * 2 * M_PI),
-			0.2 + 0.2 * __sinf((classification+0.33f) * 2 * M_PI),
-			0.2 + 0.2 * __sinf((classification+0.66f) * 2 * M_PI),
-			0.2) : make_float4(0,0,0,0);
-
-		out[idx] = out[idx] * (1-color.w) + color;
-	}
-#else
-		break;
-	}
+	float alpha = 0.4;
+	int classification = seg[(y/SCALE) * (width/SCALE) + (x/SCALE)];
 	float4 color = classification ? make_float4(
-			0.2 + 0.2 * __sinf((classification+0.00f) * 2 * M_PI),
-			0.2 + 0.2 * __sinf((classification+0.33f) * 2 * M_PI),
-			0.2 + 0.2 * __sinf((classification+0.66f) * 2 * M_PI),
-			0.2) : make_float4(0,0,0,0);
+			alpha/2 + alpha/2 * __sinf((classification/20.0f+0.00f) * 2 * M_PI),
+			alpha/2 + alpha/2 * __sinf((classification/20.0f+0.33f) * 2 * M_PI),
+			alpha/2 + alpha/2 * __sinf((classification/20.0f+0.66f) * 2 * M_PI),
+			alpha) : make_float4(0,0,0,0);
 
+	int idx = y * pitch_out/sizeof(float4) + x;
 	out[idx] = out[idx] * (1-color.w) + color;
-#endif
 }
-
 
 int smToCores(int major, int minor)
 {
@@ -211,6 +177,45 @@ void selectGPU()
 		maxId, prop.name, prop.major, prop.minor);
 }
 
+class SaveKinectCapture : public AsyncWork
+{
+public:
+	SaveKinectCapture(const char* filename, Kinect::Capture* capture)
+	{
+		_capture = capture;
+		_filename = strdup(filename);
+	}
+	~SaveKinectCapture()
+	{
+		free(_filename);
+		delete _capture;
+	}
+	virtual void doWork() override
+	{
+		char filenameWithExt[128];
+		char header[128];
+		sprintf(filenameWithExt, "%s.jpg", _filename);
+		File colorFile(_capture->color.data, _capture->color.size, false);
+		colorFile.save(filenameWithExt);
+
+		sprintf(header, "P5\n# %s\n%lu %lu\n%d\n", 
+				_filename, 
+				_capture->transformedDepth.width, _capture->transformedDepth.height,
+				0xFFFF);
+		uint8_t* buffer = (uint8_t*)malloc(_capture->transformedDepth.size + strlen(header));
+		memcpy(buffer, header, strlen(header));
+		memcpy(buffer+strlen(header), _capture->transformedDepth.data, _capture->transformedDepth.size);
+
+		sprintf(filenameWithExt, "%s.pgm.lz4", _filename);
+		File depthFile(buffer, _capture->transformedDepth.size + strlen(header), true);
+		depthFile.saveCompressed(filenameWithExt);
+	}
+
+private:
+	Kinect::Capture* _capture;
+	char* _filename;
+};
+
 int main(int /*argc*/, char** /*argv*/)
 {
 	int rc;
@@ -235,26 +240,24 @@ int main(int /*argc*/, char** /*argv*/)
 		rc = cudaMalloc(&imageBuffer, WIDTH * HEIGHT * 3);
 		if (cudaSuccess != rc) throw "Unable to allocate image buffer";
 
-		// copy to output folder
-		const char* modelPath = "../../models/ssd.engine";
-		const char* prototxt  = "../../models/ssd.prototxt";
-		const char* caffemodel= "../../models/ssd.caffemodel";
-
-		printf("Loading \"%s\"\n", modelPath);
-		Model model(modelPath, prototxt, caffemodel);
-
-		printf("Creating screen\n");
 		CudaDisplay display(TITLE, WIDTH, HEIGHT); 
 		cudaDeviceSynchronize();
-	
+		
+		printf("Starting kinect\n");
 		Kinect kinect;
 		kinect.setFramesPerSecond(config.get("KinectFramesPerSecond").uint32());
-		kinect.setColorResolution(config.get("KinectColorResolution").uint32()); //must be HEIGHT
-		kinect.setDepthMode(
-				config.get("KinectDepthModeNFOV").boolean(),
-				config.get("KinectDepthModeBinned").boolean());
+		kinect.setColorResolution(config.get("KinectColorResolution").uint32());
+		kinect.setDepthMode(config.get("KinectDepthModeNFOV").boolean(), config.get("KinectDepthModeBinned").boolean());
+		
 		kinect.open();
 		kinect.start();
+		
+		printf("Creating async work queue for kinect capture saving\n");
+		AsyncWorkQueue work(4,1000);
+
+		int frame_index = 0;
+		char filename[128];
+
 
 		dim3 blockSize = { 16, 16 };
 		dim3 gridSize = { 
@@ -262,64 +265,47 @@ int main(int /*argc*/, char** /*argv*/)
 			(HEIGHT + blockSize.y - 1) / blockSize.y 
 		}; 
 
-		dim3 gridSize300 = {
-			(300 + blockSize.x - 1) / blockSize.x,
-			(300 + blockSize.y - 1) / blockSize.y
-		};
 		display.cudaMap(stream);
 		while (true)
 		{
+			f_test<<<gridSize, blockSize, 0, stream>>>(
+				display.CUDA.frame.data,
+				display.CUDA.frame.pitch,
+				display.CUDA.frame.width,
+				display.CUDA.frame.height
+			);
+
 			auto capture = kinect.capture();
+
 			if (capture)
 			{
-				cudaEvent_t start, stop;
-				cudaEventCreate(&start);
-				cudaEventCreate(&stop);
-				cudaEventRecord(start, stream);
 #if USE_NVJPEG
 				codec.decodeToDeviceMemoryGPU(
 #else
 				codec.decodeToDeviceMemoryCPU(
 #endif
-					imageBuffer,
-					capture->color.data,
-					capture->color.size,
-					stream);
-			
-				f_normalize<<<gridSize300, blockSize, 0, stream>>>(
-					(float*)model.inputFrame.data,
-					imageBuffer
-			
-				);
-			
-				f_jpeg<<<gridSize, blockSize, 0, stream>>>(
-					display.CUDA.frame.data,
-					display.CUDA.frame.pitch,
-					imageBuffer
-				);
-			
-				model.infer(stream);
-			
-				f_bbox<<<gridSize, blockSize, 0, stream>>>(
-					display.CUDA.frame.data,
-					display.CUDA.frame.pitch,
-					(float*) model.boxesFrame.data,
-					(uint32_t*) model.keepCount.data);
-			
-				cudaEventRecord(stop, stream);
-				cudaEventSynchronize(stop);
-
-				float ms;
-				cudaEventElapsedTime(&ms, start, stop);
-				printf("CUDA elapsed time: %0.2f ms\n", ms);
-				cudaEventDestroy(start);
-				cudaEventDestroy(stop);
+						imageBuffer, 
+						capture->color.data, 
+						capture->color.size, 
+						stream);
+				sprintf(filename, "/mnt/ram/kinect_%04d", frame_index++);
+				cudaStreamSynchronize(stream);
+				auto savework = new SaveKinectCapture(filename,capture);
+				work.enqueue(savework);
 			}
+			f_jpeg<<<gridSize, blockSize, 0, stream>>>(
+				display.CUDA.frame.data,
+				display.CUDA.frame.pitch,
+				imageBuffer,
+				display.CUDA.frame.width,
+				display.CUDA.frame.height
+			);
+
 			// copies the CUDA.frame.data to GL.pbaddr
 			// and unmaps the GL.pbo
 			display.cudaFinish(stream);
 			display.render(stream);
-		
+			
 			rc = cudaGetLastError();
 			if (cudaSuccess != rc) throw "CUDA ERROR";
 
