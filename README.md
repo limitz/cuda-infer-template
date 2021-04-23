@@ -39,6 +39,32 @@ To make the swapfile persistent across reboots add the following line to `/etc/f
 ```
 /mnt/swapfile swap swap defaults 0 0
 ```
+__Invalid output on Jetson after deserialization of the engine__
+
+There is an issue with the prebuilt tensorrt package shipped in JetPack it seems. The solution is to build TensorRT yourself from tags/7.1.3 like so:
+```
+cd TensorRT
+rm -rf build
+rm -rf lib
+rm -rf bin
+git checkout tags/7.1.3
+git reset --hard
+git submodule update --init --recursive
+mkdir build
+cd build
+cmake .. -DCUDA_VERSION=10.2 -DGPU_ARCHS="72"
+make -j2
+make install
+sudo cp -P ../lib/libnv* /usr/lib/aarch64-linux-gnu/
+```
+Then make sure to remove any serialized engine in the models directory (ssd.engine) and rebuild the application
+```
+cd cuda-infer-template
+rm models/ssd.engine
+cd examples/basic
+make clean
+make
+```
 
 __Nvidia Jetson and NVJPEG__
 
