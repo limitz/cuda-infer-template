@@ -3,10 +3,10 @@ A clean starter project for running image classification through CNN inference o
 
 
 ## Usage
-Compile for your platform after cloning this repo:
+Compile one of the examples for your platform after cloning this repo:
 ``` sh
 git clone https://github.com/limitz/cuda-infer-template/
-cd cuda-infer-template
+cd cuda-infer-template/examples/basic
 make
 ```
 
