@@ -52,7 +52,7 @@ git reset --hard
 git submodule update --init --recursive
 mkdir build
 cd build
-cmake .. -DCUDA_VERSION=10.2 -DGPU_ARCHS="72"
+cmake .. -DCUDA_VERSION=10.2 -DGPU_ARCHS="53 62 72"
 make -j2
 make install
 sudo cp -P ../lib/libnv* /usr/lib/aarch64-linux-gnu/
