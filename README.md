@@ -10,11 +10,7 @@ cd cuda-infer-template
 make
 ```
 
-Generate intermediary `ONNX` network, and derive the `TensorRT` engine from that:
-``` sh
-sudo chmod +x ./models/generate.py
-cd models && ./generate.py; cd -
-```
+Follow the readme in the models directory to get the required files.
 
 Run the end result to see the classification in action:
 ``` sh
@@ -27,7 +23,7 @@ Run the end result to see the classification in action:
 
 TensorRT is included with the [latest JetPack releases](https://developer.nvidia.com/embedded/jetpack).
 
-In order to create the model it might be needed to create a BIG swapfile. (Building the engine seems to require at least 12 GB of RAM, adjust your swapfile size according to the amount of RAM your jetson has)
+In order to create some models it might be needed to create a BIG swapfile.
 ``` sh
 sudo fallocate -l 12G /mnt/swapfile
 sudo chmod 600 /mnt/swapfile
