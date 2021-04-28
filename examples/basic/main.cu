@@ -224,9 +224,9 @@ int main(int /*argc*/, char** /*argv*/)
 		printf("Loading \"%s\"\n", jpegPath);
 		
 		JpegCodec codec;
-		codec.prepare(1920, 1080, 3);
+		codec.prepare(WIDTH, HEIGHT, 3);
 		{
-			cudaMalloc(&imageBuffer, 1920 * 1080 * 3);
+			cudaMalloc(&imageBuffer, WIDTH * HEIGHT * 3);
 			
 			File jpeg;
 			jpeg.readAll(jpegPath);
