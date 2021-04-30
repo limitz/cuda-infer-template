@@ -12,9 +12,6 @@
 #include <jpeglib.h>
 #endif
 
-#define WIDTH 1280
-#define HEIGHT 720
-
 #include <display.h>
 #include <pthread.h>
 #include <math.h>
@@ -53,13 +50,13 @@ void f_test(float4* out, int pitch_out, int width, int height)
 
 // RGB interleaved as 3 byte tupels
 __global__
-void f_jpeg(float4* out, int pitch_out, uint8_t* rgb)
+void f_jpeg(float4* out, int pitch_out, uint8_t* rgb, size_t width, size_t height)
 {
 	int x = (blockIdx.x * blockDim.x + threadIdx.x);
 	int y = (blockIdx.y * blockDim.y + threadIdx.y);
-	if (x >= WIDTH || y >= HEIGHT) return;
+	if (x >= width || y >= height) return;
 
-	int offset = (y * WIDTH + x) * 3;
+	int offset = (y * width + x) * 3;
 	out[y * pitch_out / sizeof(float4) + x] = make_float4(
 			rgb[0 + offset] / 255.0f,
 			rgb[1 + offset] / 255.0f,
@@ -67,19 +64,18 @@ void f_jpeg(float4* out, int pitch_out, uint8_t* rgb)
 			1);
 }
 
-#define SDIV   (WIDTH / 300.0f)
 __global__
-void f_normalize(float* normalized, uint8_t* rgb)
+void f_normalize(float* normalized, uint8_t* rgb, size_t width, size_t height)
 {
 	int x = (blockIdx.x * blockDim.x + threadIdx.x);
 	int y = (blockIdx.y * blockDim.y + threadIdx.y);
 	if (x >= 300 || y >= 300) return;
 
-	int sx = (int) (x * SDIV);
-	int sy = (int) (y * SDIV);
-	if (sx >= WIDTH || sy >= HEIGHT) return;
+	int sx = (int) (x * width / 300.f);
+	int sy = (int) (y * width / 300.f);
+	if (sx >= width || sy >= height) return;
 
-	size_t offset = (sy * WIDTH + sx) * 3;
+	size_t offset = (sy * width + sx) * 3;
 	size_t soffset = y * 300 + x;
 
 	normalized[soffset +      0] = rgb[offset + 2] - 104.0f; 
@@ -88,11 +84,11 @@ void f_normalize(float* normalized, uint8_t* rgb)
 }
 #define OVERLAY_BOXES
 __global__
-void f_bbox(float4* out, int pitch_out, float* boxes, uint32_t* nboxes)
+void f_bbox(float4* out, int pitch_out, float* boxes, uint32_t* nboxes, size_t width, size_t height)
 {
 	int x = (blockIdx.x * blockDim.x + threadIdx.x);
 	int y = (blockIdx.y * blockDim.y + threadIdx.y);
-	if (x >= WIDTH || y >= HEIGHT) return;
+	if (x >= width || y >= height) return;
 	int idx = y * pitch_out/sizeof(float4) + x;
 
 	float classification = 0;
@@ -101,10 +97,10 @@ void f_bbox(float4* out, int pitch_out, float* boxes, uint32_t* nboxes)
 		float* box = boxes + i * 7;
 		if (box[1] != 7 && box[1] != 15) continue;
 		if (box[2] < 0.6f || box[2] > 2.0) continue;
-		float minx = box[3] * WIDTH;
-		float miny = box[4] * WIDTH;
-		float maxx = box[5] * WIDTH;
-		float maxy = box[6] * WIDTH;
+		float minx = box[3] * width;
+		float miny = box[4] * width;
+		float maxx = box[5] * width;
+		float maxy = box[6] * width;
 		if (x < minx || x > maxx || y < miny || y > maxy) continue;
 		classification = box[1] / 20.0f;
 #ifdef OVERLAY_BOXES
@@ -229,9 +225,12 @@ int main(int /*argc*/, char** /*argv*/)
 		rc = cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
 		if (cudaSuccess != rc) throw "Unable to create CUDA stream";
 
+		size_t cam_width = config.get("WebcamWidth").uint32();
+		size_t cam_height = config.get("WebcamHeight").uint32();
+
 		JpegCodec codec;
-		codec.prepare(WIDTH, HEIGHT, 3);
-		rc = cudaMalloc(&imageBuffer, WIDTH * HEIGHT * 3);
+		codec.prepare(cam_width, cam_height, 3);
+		rc = cudaMalloc(&imageBuffer, cam_width * cam_height * 3);
 		if (cudaSuccess != rc) throw "Unable to allocate image buffer";
 
 		// copy to output folder
@@ -243,22 +242,20 @@ int main(int /*argc*/, char** /*argv*/)
 		Model model(modelPath, prototxt, caffemodel);
 
 		printf("Creating screen\n");
-		CudaDisplay display(TITLE, WIDTH, HEIGHT); 
+		CudaDisplay display(TITLE, cam_width, cam_height); 
 		cudaDeviceSynchronize();
 	
 		VideoDevice webcam(config.get("WebcamDevice").string());
 		webcam.setFramesPerSecond(config.get("WebcamFramesPerSecond").uint32());
-		webcam.setResolution(
-				config.get("WebcamWidth").uint32(), //must be WIDTH
-				config.get("WebcamHeight").uint32()); //must be HEIGHT
+		webcam.setResolution(cam_width, cam_height); //must be WIDTH
 		webcam.open();
 		webcam.start();
 
 		dim3 blockSize = { 16, 16 };
-		dim3 gridSize = { 
-			(WIDTH  + blockSize.x - 1) / blockSize.x, 
-			(HEIGHT + blockSize.y - 1) / blockSize.y 
-		}; 
+		dim3 gridSize = {0};
+		gridSize.x = (cam_width  + blockSize.x - 1) / blockSize.x;
+		gridSize.y = (cam_height + blockSize.y - 1) / blockSize.y;
+		
 
 		dim3 gridSize300 = {
 			(300 + blockSize.x - 1) / blockSize.x,
@@ -270,6 +267,7 @@ int main(int /*argc*/, char** /*argv*/)
 			auto capture = webcam.capture();
 			if (capture)
 			{
+				
 				cudaEvent_t start, stop;
 				cudaEventCreate(&start);
 				cudaEventCreate(&stop);
@@ -286,14 +284,18 @@ int main(int /*argc*/, char** /*argv*/)
 			
 				f_normalize<<<gridSize300, blockSize, 0, stream>>>(
 					(float*)model.inputFrame.data,
-					imageBuffer
+					imageBuffer,
+					cam_width,
+					cam_height
 			
 				);
 			
 				f_jpeg<<<gridSize, blockSize, 0, stream>>>(
 					display.CUDA.frame.data,
 					display.CUDA.frame.pitch,
-					imageBuffer
+					imageBuffer,
+					cam_width,
+					cam_height
 				);
 			
 				model.infer(stream);
@@ -302,7 +304,10 @@ int main(int /*argc*/, char** /*argv*/)
 					display.CUDA.frame.data,
 					display.CUDA.frame.pitch,
 					(float*) model.boxesFrame.data,
-					(uint32_t*) model.keepCount.data);
+					(uint32_t*) model.keepCount.data,
+					cam_width,
+					cam_height
+				);
 			
 				cudaEventRecord(stop, stream);
 				cudaEventSynchronize(stop);
@@ -314,11 +319,12 @@ int main(int /*argc*/, char** /*argv*/)
 				cudaEventDestroy(stop);
 
 				delete capture;
+			
+				display.cudaFinish(stream);
+				display.render(stream);
 			}
 			// copies the CUDA.frame.data to GL.pbaddr
 			// and unmaps the GL.pbo
-			display.cudaFinish(stream);
-			display.render(stream);
 		
 			rc = cudaGetLastError();
 			if (cudaSuccess != rc) throw "CUDA ERROR";
@@ -329,6 +335,7 @@ int main(int /*argc*/, char** /*argv*/)
 				webcam.stop();
 				webcam.close();
 				display.cudaUnmap(stream);
+				cudaStreamSynchronize(stream);
 				cudaStreamDestroy(stream);
 				return 0;
 			}

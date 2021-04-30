@@ -1,7 +1,7 @@
 #include <display.h>
 
 #ifndef FULLSCREEN
-#define FULLSCREEN 1
+#define FULLSCREEN 0
 #endif
 
 CudaDisplay::CudaDisplay(const char* title, size_t width, size_t height)
@@ -129,9 +129,11 @@ CudaDisplay::CudaDisplay(const char* title, size_t width, size_t height)
 
 	if (!eglMakeCurrent(EGL.display,EGL.surface, EGL.surface, EGL.context))
 		throw "eglMakeCurrent";
-	
+
 	initBuffers();
 	makeProgram();
+	
+	eglSwapInterval(EGL.display, 1);
 }
 
 int CudaDisplay::attachShader( GLenum type, const char* path)
@@ -238,6 +240,8 @@ int CudaDisplay::cudaMap(cudaStream_t /*stream*/)
 
 	rc = cudaGraphicsResourceGetMappedPointer((void**)&GL.pbaddr, &GL.pbsize, GL.pbres);
 	if (cudaSuccess != rc) throw "Unable to get mapped pointer";
+	
+	
 	return 0;
 }
 
@@ -266,8 +270,9 @@ int CudaDisplay::cudaUnmap(cudaStream_t stream)
 	return 0;
 }
 
-int CudaDisplay::render(cudaStream_t /*stream*/)
+int CudaDisplay::render(cudaStream_t stream)
 {
+	cudaStreamSynchronize(stream);
 	glClearColor(0.5, 0.5, 0.5, 1);
 	glClear(GL_COLOR_BUFFER_BIT);
 
