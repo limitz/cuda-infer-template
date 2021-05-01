@@ -27,6 +27,14 @@
 #define TITLE "CUDA INFERENCE DEMO"
 #endif
 
+#ifndef MAX
+#define MAX(a,b) ((a)<(b)?(b):(a))
+#endif
+
+#ifndef MIN
+#define MIN(a,b) ((a)>(b)?(b):(a))
+#endif
+
 #ifndef USE_NVJPEG
 #define USE_NVJPEG 0
 #endif
@@ -42,26 +50,35 @@ void f_test(float4* out, int pitch_out, int width, int height)
 	int y = (blockIdx.y * blockDim.y + threadIdx.y);
 	if (x >= width || y >= height) return;
 
+	float r = __sinf(M_PI * x / width);
+	float g = __sinf(M_PI * y / height);
+	r *= (y/2) % 2;
+	r = r * g;
+	g = r * r * r;
+	float b = g * g;
 	out[y * pitch_out / sizeof(float4) + x] = make_float4(
-			(float) x / width, 
-			(float) y / height, 
-			0, 1);
+			r,g,b,1);
 }
 
 // RGB interleaved as 3 byte tupels
 __global__
-void f_jpeg(float4* out, int pitch_out, uint8_t* rgb, size_t width, size_t height)
+void f_jpeg(float4* out, int pitch_out, uint8_t* rgb, size_t pitch_rgb, size_t height_rgb, 
+		size_t width, size_t height, float scale)
 {
 	int x = (blockIdx.x * blockDim.x + threadIdx.x);
 	int y = (blockIdx.y * blockDim.y + threadIdx.y);
 	if (x >= width || y >= height) return;
 
-	int offset = (y * width + x) * 3;
-	out[y * pitch_out / sizeof(float4) + x] = make_float4(
-			rgb[0 + offset] / 255.0f,
-			rgb[1 + offset] / 255.0f,
-			rgb[2 + offset] / 255.0f,
-			1);
+	int sx = scale * x;
+	int sy = scale * y;
+	if (sx >= pitch_rgb || sy >= height_rgb) return;
+
+	int offset = (sy * pitch_rgb + sx) * 3;
+	float r = rgb[0 + offset];
+	float g = rgb[1 + offset];
+	float b = rgb[2 + offset];
+	g = (0.299f/255.f) * r + (0.587f/255.f) * g + (0.114f/255.f) * b;
+	out[y * pitch_out / sizeof(float4) + x] *= g;
 }
 
 __global__
@@ -227,6 +244,8 @@ int main(int /*argc*/, char** /*argv*/)
 
 		size_t cam_width = config.get("WebcamWidth").uint32();
 		size_t cam_height = config.get("WebcamHeight").uint32();
+		size_t width = config.get("Width").uint32();   //cam_width * 2;
+		size_t height = config.get("Height").uint32(); //cam_height * 2;
 
 		JpegCodec codec;
 		codec.prepare(cam_width, cam_height, 3);
@@ -242,7 +261,7 @@ int main(int /*argc*/, char** /*argv*/)
 		Model model(modelPath, prototxt, caffemodel);
 
 		printf("Creating screen\n");
-		CudaDisplay display(TITLE, cam_width, cam_height); 
+		CudaDisplay display(TITLE, width, height); 
 		cudaDeviceSynchronize();
 	
 		VideoDevice webcam(config.get("WebcamDevice").string());
@@ -252,11 +271,15 @@ int main(int /*argc*/, char** /*argv*/)
 		webcam.start();
 
 		dim3 blockSize = { 16, 16 };
-		dim3 gridSize = {0};
-		gridSize.x = (cam_width  + blockSize.x - 1) / blockSize.x;
-		gridSize.y = (cam_height + blockSize.y - 1) / blockSize.y;
 		
+		dim3 gridSizeCam = {0};
+		gridSizeCam.x = (cam_width  + blockSize.x - 1) / blockSize.x;
+		gridSizeCam.y = (cam_height + blockSize.y - 1) / blockSize.y;
 
+		dim3 gridSize = {0};
+		gridSize.x = (width  + blockSize.x - 1) / blockSize.x;
+		gridSize.y = (height + blockSize.y - 1) / blockSize.y;
+		
 		dim3 gridSize300 = {
 			(300 + blockSize.x - 1) / blockSize.x,
 			(300 + blockSize.y - 1) / blockSize.y
@@ -281,6 +304,12 @@ int main(int /*argc*/, char** /*argv*/)
 					capture->data,
 					capture->size,
 					stream);
+		
+				f_test<<<gridSize, blockSize, 0, stream>>>(
+					display.CUDA.frame.data,
+					display.CUDA.frame.pitch,
+					width, height
+				);
 			
 				f_normalize<<<gridSize300, blockSize, 0, stream>>>(
 					(float*)model.inputFrame.data,
@@ -290,24 +319,29 @@ int main(int /*argc*/, char** /*argv*/)
 			
 				);
 			
+				float scale = MAX(cam_width / (float)width, cam_height / (float)height);
+				
 				f_jpeg<<<gridSize, blockSize, 0, stream>>>(
 					display.CUDA.frame.data,
 					display.CUDA.frame.pitch,
 					imageBuffer,
 					cam_width,
-					cam_height
+					cam_height,
+					width,
+					height,
+					scale
 				);
 			
-				model.infer(stream);
+				//model.infer(stream);
 			
-				f_bbox<<<gridSize, blockSize, 0, stream>>>(
+				/*f_bbox<<<gridSize, blockSize, 0, stream>>>(
 					display.CUDA.frame.data,
 					display.CUDA.frame.pitch,
 					(float*) model.boxesFrame.data,
 					(uint32_t*) model.keepCount.data,
-					cam_width,
-					cam_height
-				);
+					width,
+					height
+				);*/
 			
 				cudaEventRecord(stop, stream);
 				cudaEventSynchronize(stop);
