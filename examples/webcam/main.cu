@@ -43,23 +43,6 @@
 
 static uint8_t* imageBuffer = {0};
 
-__global__
-void f_test(float4* out, int pitch_out, int width, int height)
-{
-	int x = (blockIdx.x * blockDim.x + threadIdx.x);
-	int y = (blockIdx.y * blockDim.y + threadIdx.y);
-	if (x >= width || y >= height) return;
-
-	float r = __sinf(M_PI * x / width);
-	float g = __sinf(M_PI * y / height);
-	r *= (y/2) % 2;
-	r = r * g;
-	g = r * r * r;
-	float b = g * g;
-	out[y * pitch_out / sizeof(float4) + x] = make_float4(
-			r,g,b,1);
-}
-
 // RGB interleaved as 3 byte tupels
 __global__
 void f_jpeg(float4* out, int pitch_out, uint8_t* rgb, size_t pitch_rgb, size_t height_rgb, 
@@ -77,8 +60,8 @@ void f_jpeg(float4* out, int pitch_out, uint8_t* rgb, size_t pitch_rgb, size_t h
 	float r = rgb[0 + offset];
 	float g = rgb[1 + offset];
 	float b = rgb[2 + offset];
-	g = (0.299f/255.f) * r + (0.587f/255.f) * g + (0.114f/255.f) * b;
-	out[y * pitch_out / sizeof(float4) + x] *= g;
+	//float gray = (0.299f/255.f) * r + (0.587f/255.f) * g + (0.114f/255.f) * b;
+	out[y * pitch_out / sizeof(float4) + x] = make_float4(r/255.0, g/255.0, b/255.0, 1);
 }
 
 __global__
@@ -244,8 +227,8 @@ int main(int /*argc*/, char** /*argv*/)
 
 		size_t cam_width = config.get("WebcamWidth").uint32();
 		size_t cam_height = config.get("WebcamHeight").uint32();
-		size_t width = config.get("Width").uint32();   //cam_width * 2;
-		size_t height = config.get("Height").uint32(); //cam_height * 2;
+		size_t width = config.get("Width").uint32();
+		size_t height = config.get("Height").uint32();
 
 		JpegCodec codec;
 		codec.prepare(cam_width, cam_height, 3);
@@ -266,11 +249,11 @@ int main(int /*argc*/, char** /*argv*/)
 	
 		VideoDevice webcam(config.get("WebcamDevice").string());
 		webcam.setFramesPerSecond(config.get("WebcamFramesPerSecond").uint32());
-		webcam.setResolution(cam_width, cam_height); //must be WIDTH
+		webcam.setResolution(cam_width, cam_height); 
 		webcam.open();
 		webcam.start();
 
-		dim3 blockSize = { 16, 16 };
+		dim3 blockSize = { 32, 32 };
 		
 		dim3 gridSizeCam = {0};
 		gridSizeCam.x = (cam_width  + blockSize.x - 1) / blockSize.x;
@@ -305,12 +288,6 @@ int main(int /*argc*/, char** /*argv*/)
 					capture->size,
 					stream);
 		
-				f_test<<<gridSize, blockSize, 0, stream>>>(
-					display.CUDA.frame.data,
-					display.CUDA.frame.pitch,
-					width, height
-				);
-			
 				f_normalize<<<gridSize300, blockSize, 0, stream>>>(
 					(float*)model.inputFrame.data,
 					imageBuffer,
@@ -332,17 +309,17 @@ int main(int /*argc*/, char** /*argv*/)
 					scale
 				);
 			
-				//model.infer(stream);
-			
-				/*f_bbox<<<gridSize, blockSize, 0, stream>>>(
+				model.infer(stream);
+				
+				f_bbox<<<gridSize, blockSize, 0, stream>>>(
 					display.CUDA.frame.data,
 					display.CUDA.frame.pitch,
 					(float*) model.boxesFrame.data,
 					(uint32_t*) model.keepCount.data,
 					width,
 					height
-				);*/
-			
+				);
+
 				cudaEventRecord(stop, stream);
 				cudaEventSynchronize(stop);
 
