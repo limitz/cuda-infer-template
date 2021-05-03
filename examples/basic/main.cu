@@ -27,6 +27,8 @@
 #define TITLE "CUDA INFERENCE DEMO"
 #endif
 
+#define MIN_PROB 0.6
+
 #ifndef USE_NVJPEG
 #define USE_NVJPEG 0
 #endif
@@ -34,6 +36,10 @@
 //width and height defines come from inference.h at the moment
 
 static uint8_t* imageBuffer = {0};
+const char* const classNames[] = {
+	"background", "aeroplane", "bicycle", "bird", "boat", "bottle", "bus", "car", "cat", "chair", "cow", 
+	"diningtable", "dog", "horse", "motorbike", "person", "pottedplant", "sheep", "sofa","train", "tvmonitor"
+};
 
 __global__
 void f_test(float4* out, int pitch_out, int width, int height)
@@ -94,7 +100,7 @@ void f_bbox(float4* out, int pitch_out, float* boxes, uint32_t* nboxes)
 	for (int i=0; i<*nboxes; i++)
 	{
 		float* box = boxes + i * 7;
-		if (box[2] < 0.8f || box[2] > 1.0) continue;
+		if (box[2] < MIN_PROB || box[2] > 1.0) continue;
 		if (box[1] <= 0 || box[1] >= 21) continue;
 		float minx = box[3] * WIDTH;
 		float miny = box[4] * WIDTH;
@@ -287,29 +293,61 @@ int main(int /*argc*/, char** /*argv*/)
 			);
 
 			cudaEventRecord(start);
-			for (int i=0; i<10; i++)
-			{
-				model.infer(stream);
-			}
+			model.infer(stream);
 			cudaEventRecord(stop);
 			
+			// Copy the bounding boxes to host memory to display them 
+			// on the command line
+			uint32_t count;
+			cudaMemcpyAsync(&count, model.keepCount.data, sizeof(uint32_t), cudaMemcpyDeviceToHost, stream);
+
+			size_t bsize = count * 7 * sizeof(float);
+			float* boxes = (float*)malloc(bsize);
+			cudaMemcpyAsync(boxes, model.boxesFrame.data, bsize, cudaMemcpyDeviceToHost, stream);
+	
+			// Draw the boxes (from device memory)
 			f_bbox<<<gridSize, blockSize, 0, stream>>>(
 				display.CUDA.frame.data,
 				display.CUDA.frame.pitch,
 				(float*) model.boxesFrame.data,
 				(uint32_t*) model.keepCount.data);
 
-			// copies the CUDA.frame.data to GL.pbaddr
-			// and unmaps the GL.pbo
+			// This is also done by display.cudaFinish in this example.
+			cudaStreamSynchronize(stream);
+			
+			// Here we know all drawing has been done, and all memcpy's are finished
+			// Due to the synchronize above
+		
+			// Draw the pixelbuffer on screen
 			display.cudaFinish(stream);
 			display.render(stream);
 		
+
 			float ms;
 			cudaEventElapsedTime(&ms, start, stop);
 			cudaEventDestroy(start);
 			cudaEventDestroy(stop);
+
+			printf("Number of boxes: %d\n", count);
+			for (size_t i=0; i<count; i++)
+			{
+				size_t bidx = 7 * i;
+				float prob = boxes[bidx + 2];
+				if (prob < MIN_PROB || prob > 1) continue;
+				float clas = boxes[bidx + 1];
+				float minx = boxes[bidx + 3] * WIDTH;
+				float miny = boxes[bidx + 4] * WIDTH;
+				float maxx = boxes[bidx + 5] * WIDTH;
+				float maxy = boxes[bidx + 6] * WIDTH;
 			
-			printf("AVG inference time: %0.04f ms\n", ms/10.0f);
+
+				const char* className = classNames[(uint32_t)clas];
+
+				printf("%0.02f%% [[%0.01f, %0.01f],[%0.01f, %0.01f]] => %s\n", prob*100, minx, miny, maxx, maxy, className);
+			}
+			free(boxes);
+
+			printf("inference time: %0.04f ms\n\n", ms);
 			rc = cudaGetLastError();
 			if (cudaSuccess != rc) throw "CUDA ERROR";
 

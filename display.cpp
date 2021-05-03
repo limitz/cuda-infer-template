@@ -1,7 +1,7 @@
 #include <display.h>
 
 #ifndef FULLSCREEN
-#define FULLSCREEN 0
+#define FULLSCREEN 1
 #endif
 
 CudaDisplay::CudaDisplay(const char* title, size_t width, size_t height)
