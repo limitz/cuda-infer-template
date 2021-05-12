@@ -53,13 +53,13 @@ void f_test(float4* out, int pitch_out, int width, int height)
 
 // RGB interleaved as 3 byte tupels
 __global__
-void f_jpeg(float4* out, int pitch_out, uint8_t* rgb)
+void f_jpeg(float4* out, int pitch_out, uint8_t* rgb, size_t width, size_t height)
 {
 	int x = (blockIdx.x * blockDim.x + threadIdx.x);
 	int y = (blockIdx.y * blockDim.y + threadIdx.y);
-	if (x >= WIDTH || y >= HEIGHT) return;
+	if (x >= width || y >= height) return;
 
-	int offset = (y * WIDTH + x) * 3;
+	int offset = (y * width + x) * 3;
 	out[y * pitch_out / sizeof(float4) + x] = make_float4(
 			rgb[0 + offset] / 255.0f,
 			rgb[1 + offset] / 255.0f,
@@ -67,32 +67,33 @@ void f_jpeg(float4* out, int pitch_out, uint8_t* rgb)
 			1);
 }
 
-#define SDIV   (WIDTH / 300.0f)
 __global__
-void f_normalize(float* normalized, uint8_t* rgb)
+void f_normalize(float* normalized, uint8_t* rgb, size_t width, size_t height)
 {
 	int x = (blockIdx.x * blockDim.x + threadIdx.x);
 	int y = (blockIdx.y * blockDim.y + threadIdx.y);
 	if (x >= 300 || y >= 300) return;
 
-	int sx = (int) (x * SDIV);
-	int sy = (int) (y * SDIV);
-	if (sx >= WIDTH || sy >= HEIGHT) return;
+	int sx = (int) (x * width / 300.0f);
+	int sy = (int) (y * width / 300.0f);
+	if (sx >= width || sy >= height) return;
 
-	size_t offset = (sy * WIDTH + sx) * 3;
+	size_t offset = (sy * width+ sx) * 3;
 	size_t soffset = y * 300 + x;
 
 	normalized[soffset +      0] = rgb[offset + 2] - 104.0f; 
 	normalized[soffset +  90000] = rgb[offset + 1] - 117.0f; 
 	normalized[soffset + 180000] = rgb[offset + 0] - 123.0f; 
 }
+
 #define OVERLAY_BOXES
+
 __global__
-void f_bbox(float4* out, int pitch_out, float* boxes, uint32_t* nboxes)
+void f_bbox(float4* out, int pitch_out, float* boxes, uint32_t* nboxes, size_t width, size_t height)
 {
 	int x = (blockIdx.x * blockDim.x + threadIdx.x);
 	int y = (blockIdx.y * blockDim.y + threadIdx.y);
-	if (x >= WIDTH || y >= HEIGHT) return;
+	if (x >= width || y >= height) return;
 	int idx = y * pitch_out/sizeof(float4) + x;
 
 	float classification = 0;
@@ -101,10 +102,10 @@ void f_bbox(float4* out, int pitch_out, float* boxes, uint32_t* nboxes)
 		float* box = boxes + i * 7;
 		if (box[1] != 7 && box[1] != 15) continue;
 		if (box[2] < 0.6f || box[2] > 2.0) continue;
-		float minx = box[3] * WIDTH;
-		float miny = box[4] * WIDTH;
-		float maxx = box[5] * WIDTH;
-		float maxy = box[6] * WIDTH;
+		float minx = box[3] * width;
+		float miny = box[4] * width;
+		float maxx = box[5] * width;
+		float maxy = box[6] * width;
 		if (x < minx || x > maxx || y < miny || y > maxy) continue;
 		classification = box[1] / 20.0f;
 #ifdef OVERLAY_BOXES
@@ -230,9 +231,16 @@ int main(int /*argc*/, char** /*argv*/)
 		rc = cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
 		if (cudaSuccess != rc) throw "Unable to create CUDA stream";
 
+		size_t displayWidth  = config.get("Display.Width").uint32();
+		size_t displayHeight = config.get("Display.Height").uint32();
+		size_t colorWidth    = config.get("Kinect.Acquisition.Color.Width").uint32();
+		size_t colorHeight   = config.get("Kinect.Acquisition.Color.Height").uint32();
+		size_t depthWidth    = config.get("Kinect.Acquisition.Depth.Width").uint32();
+		size_t depthHeight   = config.get("Kinect.Acquisition.Depth.Height").uint32();
+
 		JpegCodec codec;
-		codec.prepare(WIDTH, HEIGHT, 3);
-		rc = cudaMalloc(&imageBuffer, WIDTH * HEIGHT * 3);
+		codec.prepare(colorWidth, colorHeight, 3, 80);
+		rc = cudaMalloc(&imageBuffer, colorWidth * colorHeight * 3);
 		if (cudaSuccess != rc) throw "Unable to allocate image buffer";
 
 		// copy to output folder
@@ -244,22 +252,40 @@ int main(int /*argc*/, char** /*argv*/)
 		Model model(modelPath, prototxt, caffemodel);
 
 		printf("Creating screen\n");
-		CudaDisplay display(TITLE, WIDTH, HEIGHT); 
+		CudaDisplay display(TITLE, displayWidth, displayHeight); 
 		cudaDeviceSynchronize();
 	
 		Kinect kinect;
-		kinect.setFramesPerSecond(config.get("KinectFramesPerSecond").uint32());
-		kinect.setColorResolution(config.get("KinectColorResolution").uint32()); //must be HEIGHT
-		kinect.setDepthMode(
-				config.get("KinectDepthModeNFOV").boolean(),
-				config.get("KinectDepthModeBinned").boolean());
-		kinect.open();
+		auto s = &kinect.settings;
+		s->acquisition.frameRate     = config.get("Kinect.Acquisition.FrameRate").uint32();
+		s->acquisition.color.width   = colorWidth; 
+		s->acquisition.color.height  = colorHeight;
+		s->acquisition.depth.width   = depthWidth; 
+		s->acquisition.depth.height  = depthHeight;
+		s->acquisition.color.transform = config.get("Kinect.Acquisition.Color.Transform").boolean();
+		s->acquisition.depth.transform = config.get("Kinect.Acquisition.Depth.Transform").boolean();
+		s->acquisition.depth.compress  = config.get("Kinect.Acquisition.Depth.Compress").boolean();
+		
+		s->colorControl.exposure     = config.get("Kinect.ColorControl.Exposure").int32();
+		s->colorControl.gain         = config.get("Kinect.ColorControl.Gain").int32();
+		s->colorControl.brightness   = config.get("Kinect.ColorControl.Brightness").int32();
+		s->colorControl.saturation   = config.get("Kinect.ColorControl.Saturation").int32();
+		s->colorControl.contrast     = config.get("Kinect.ColorControl.Contrast").int32();
+		s->colorControl.whitebalance = config.get("Kinect.ColorControl.Whitebalance").int32();
+		s->colorControl.sharpness    = config.get("Kinect.ColorControl.Sharpness").int32();
+
+		s->colorControl.backlightCompensation = 
+			config.get("Kinect.ColorControl.BacklightCompensation").int32();
+		
+		s->colorControl.powerlineFrequency = 
+			config.get("Kinect.ColorControl.PowerlineFrequency").int32();
+		
 		kinect.start();
 
 		dim3 blockSize = { 16, 16 };
 		dim3 gridSize = { 
-			(WIDTH  + blockSize.x - 1) / blockSize.x, 
-			(HEIGHT + blockSize.y - 1) / blockSize.y 
+			((uint32_t)displayWidth  + blockSize.x - 1) / blockSize.x, 
+			((uint32_t)displayHeight + blockSize.y - 1) / blockSize.y 
 		}; 
 
 		dim3 gridSize300 = {
@@ -288,14 +314,17 @@ int main(int /*argc*/, char** /*argv*/)
 			
 				f_normalize<<<gridSize300, blockSize, 0, stream>>>(
 					(float*)model.inputFrame.data,
-					imageBuffer
-			
+					imageBuffer,
+					colorWidth,
+					colorHeight
 				);
 			
 				f_jpeg<<<gridSize, blockSize, 0, stream>>>(
 					display.CUDA.frame.data,
 					display.CUDA.frame.pitch,
-					imageBuffer
+					imageBuffer,
+					colorWidth,
+					colorHeight
 				);
 			
 				model.infer(stream);
@@ -304,7 +333,9 @@ int main(int /*argc*/, char** /*argv*/)
 					display.CUDA.frame.data,
 					display.CUDA.frame.pitch,
 					(float*) model.boxesFrame.data,
-					(uint32_t*) model.keepCount.data);
+					(uint32_t*) model.keepCount.data,
+					colorWidth,
+					colorHeight);
 			
 				cudaEventRecord(stop, stream);
 				cudaEventSynchronize(stop);
@@ -315,6 +346,7 @@ int main(int /*argc*/, char** /*argv*/)
 				cudaEventDestroy(start);
 				cudaEventDestroy(stop);
 			}
+
 			// copies the CUDA.frame.data to GL.pbaddr
 			// and unmaps the GL.pbo
 			display.cudaFinish(stream);
@@ -327,7 +359,6 @@ int main(int /*argc*/, char** /*argv*/)
 			if (display.events()) 
 			{
 				kinect.stop();
-				kinect.close();
 				display.cudaUnmap(stream);
 				cudaStreamDestroy(stream);
 				return 0;

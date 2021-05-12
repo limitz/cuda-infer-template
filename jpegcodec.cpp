@@ -8,7 +8,8 @@ JpegCodec::JpegCodec()
 	_buffer = nullptr;
 	_scanlines = nullptr;
 	
-	_cinfo.err = jpeg_std_error(&_jerr);
+	_dinfo.err = jpeg_std_error(&_djerr);
+	_cinfo.err = jpeg_std_error(&_cjerr);
 }
 	
 JpegCodec::~JpegCodec()
@@ -17,7 +18,7 @@ JpegCodec::~JpegCodec()
 	free(_scanlines);
 }
 
-void JpegCodec::prepare(int width, int height, int channels)
+void JpegCodec::prepare(int width, int height, int channels, int quality)
 {
 	if (channels != 3) throw "Not implemented channels != 3";
 
@@ -40,39 +41,62 @@ void JpegCodec::prepare(int width, int height, int channels)
 		_scanlines[i] = (JSAMPROW) (_buffer + i * _width * _channels);
 	}
 
-	jpeg_create_decompress(&_cinfo);
+	jpeg_create_decompress(&_dinfo);
+	jpeg_create_compress(&_cinfo);
+	
+	_cinfo.image_width = _width;
+	_cinfo.image_height = height;
+	_cinfo.input_components = 3;
+	_cinfo.in_color_space = JCS_RGB; 
+	jpeg_set_defaults(&_cinfo);
+	jpeg_set_quality(&_cinfo, quality, 1);
 }
 
 void JpegCodec::unprepare()
 {
-	jpeg_destroy_decompress(&_cinfo);
+	jpeg_destroy_decompress(&_dinfo);
+	jpeg_destroy_compress(&_cinfo);
 }
 
-void JpegCodec::decodeToDeviceMemoryCPU(void* dst, const void* src, int size, cudaStream_t stream)
+void JpegCodec::encodeCPU(void* dst, size_t *size)
 {
-	jpeg_mem_src(&_cinfo, (uint8_t*)src, size);
-	jpeg_read_header(&_cinfo, 1);
-	jpeg_calc_output_dimensions(&_cinfo);
-
-	if (_cinfo.output_width != _width 
-	||  _cinfo.output_height != _height
-	||  _cinfo.output_components != (int) _channels)
+	//cudaMemcpyAsync(_buffer, src, _width * _height * _channels, cudaMemcpyDeviceToHost, stream);
+	//cudaStreamSynchronize(stream);
+	
+	jpeg_mem_dest(&_cinfo, (uint8_t**)&dst, size);
+	jpeg_start_compress(&_cinfo, 1);
+	while (_cinfo.next_scanline < _cinfo.image_height)
 	{
-		jpeg_abort_decompress(&_cinfo);
+		jpeg_write_scanlines(&_cinfo, _scanlines + _cinfo.next_scanline, _cinfo.image_height - _cinfo.next_scanline);
+	}
+	jpeg_finish_compress(&_cinfo);
+}
+
+void JpegCodec::decodeToDeviceMemoryCPU(void* dst, const void* src, size_t size, cudaStream_t stream)
+{
+	jpeg_mem_src(&_dinfo, (uint8_t*)src, size);
+	jpeg_read_header(&_dinfo, 1);
+	jpeg_calc_output_dimensions(&_dinfo);
+
+	if (_dinfo.output_width != _width 
+	||  _dinfo.output_height != _height
+	||  _dinfo.output_components != (int) _channels)
+	{
+		jpeg_abort_decompress(&_dinfo);
 		throw "Invalid image format";
 	}
-	jpeg_start_decompress(&_cinfo);
-	while (_cinfo.output_scanline < _cinfo.output_height)
+	jpeg_start_decompress(&_dinfo);
+	while (_dinfo.output_scanline < _dinfo.output_height)
 	{
-		jpeg_read_scanlines(&_cinfo, _scanlines + _cinfo.output_scanline,_cinfo.output_height - _cinfo.output_scanline);
+		jpeg_read_scanlines(&_dinfo, _scanlines + _dinfo.output_scanline,_dinfo.output_height - _dinfo.output_scanline);
 	}
-	jpeg_finish_decompress(&_cinfo);
+	jpeg_finish_decompress(&_dinfo);
 
 	cudaMemcpyAsync(dst, _buffer, _width * _height * _channels, cudaMemcpyHostToDevice, stream);
 }
 
 #if USE_NVJPEG
-void JpegCodec::decodeToDeviceMemoryGPU(void* dst, const void* src, int size, cudaStream_t stream)
+void JpegCodec::decodeToDeviceMemoryGPU(void* dst, const void* src, size_t size, cudaStream_t stream)
 {
 	int rc;
 	

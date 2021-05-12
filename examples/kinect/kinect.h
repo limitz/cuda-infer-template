@@ -11,6 +11,43 @@ public:
 	Kinect();
 	~Kinect();
 
+	struct Settings
+	{
+
+		struct
+		{
+			struct 
+			{
+				size_t width = 1024;
+				size_t height = 1024;
+				bool transform = false;
+				bool compress = false;
+			} depth;
+			
+			struct
+			{
+				size_t width = 2048;
+				size_t height = 1536;
+				bool transform = false;
+			} color;
+			int frameRate = 15;
+		
+		} acquisition;
+
+		struct 
+		{
+			int gain = 0;
+			int saturation = 128;
+			int brightness = 128;
+			int exposure = -1;
+			int sharpness = 0;
+			int contrast = 128 ;
+			int whitebalance = -1;
+			int backlightCompensation = 0;
+			int powerlineFrequency = 1;
+		} colorControl;
+	};
+
 	class Capture
 	{
 	public:
@@ -29,19 +66,16 @@ public:
 		k4a_capture_t _capture;
 	};
 
-	void setColorResolution(size_t res);
-	void setDepthMode(bool nfov, bool binned);
-	void setFramesPerSecond(size_t rate);
+	Settings settings;
+	void updateSettings(bool force = false);
 
-	void open();
 	void start();
 	void stop();
-	void close();
 
 	Kinect::Capture* capture();
 
-
 private:
+	Settings activeSettings;
 	k4a_transformation_t _transformation;
 	k4a_calibration_t _calibration;
 	k4a_device_t _device;
