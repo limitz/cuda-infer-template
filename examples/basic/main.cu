@@ -27,7 +27,7 @@
 #define TITLE "CUDA INFERENCE DEMO"
 #endif
 
-#define MIN_PROB 0.6
+#define MIN_PROB 0.4
 
 #ifndef USE_NVJPEG
 #define USE_NVJPEG 0
@@ -226,7 +226,7 @@ int main(int /*argc*/, char** /*argv*/)
 		rc = cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
 		if (cudaSuccess != rc) throw "Unable to create CUDA stream";
 
-		const char* jpegPath = "sheep.jpg";
+		const char* jpegPath = "cars-back.jpg";
 		printf("Loading \"%s\"\n", jpegPath);
 		
 		JpegCodec codec;
@@ -292,9 +292,9 @@ int main(int /*argc*/, char** /*argv*/)
 				imageBuffer
 			);
 
-			cudaEventRecord(start);
+			cudaEventRecord(start,stream);
 			model.infer(stream);
-			cudaEventRecord(stop);
+			cudaEventRecord(stop,stream);
 			
 			// Copy the bounding boxes to host memory to display them 
 			// on the command line

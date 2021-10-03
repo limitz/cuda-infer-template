@@ -1,5 +1,7 @@
 #include "inference.h"
 
+#define BATCHSIZE 1
+
 Model::Model(const char* filename, const char* prototxt, const char* caffemodel)
 {
 	inputFrame.data = nullptr;
@@ -106,8 +108,8 @@ void Model::load(const char* filename, const char* prototxt, const char* caffemo
 
 		_network->markOutput(*blobNameToTensor->find("keep_count"));
 		_network->markOutput(*blobNameToTensor->find("detection_out"));
-		_builder->setMaxBatchSize(1);
-		_config->setMaxWorkspaceSize(36 * 1000 * 1000);
+		_builder->setMaxBatchSize(BATCHSIZE);
+		_config->setMaxWorkspaceSize(256 * 1000 * 1000);
 		_config->setFlag(BuilderFlag::kFP16);
 	
 		if (false)
@@ -160,20 +162,20 @@ void Model::setup()
 	boxesFrame.length = 7 * 200;
 
 	printf("Creating model frames\n");
-	rc = cudaMalloc(&inputFrame.data, 3 * 300 * 300 * sizeof(float));
+	rc = cudaMalloc(&inputFrame.data, BATCHSIZE * 3 * 300 * 300 * sizeof(float));
 	if (cudaSuccess != rc) throw "Unable to allocate input frame device memory";
 
-	rc = cudaMalloc(&boxesFrame.data, boxesFrame.length * sizeof(float));
+	rc = cudaMalloc(&boxesFrame.data, BATCHSIZE * boxesFrame.length * sizeof(float));
 	if (cudaSuccess != rc) throw "Unable to allocate boxes frame device memory";
 	
-	rc = cudaMalloc(&keepCount.data, sizeof(float));
+	rc = cudaMalloc(&keepCount.data, BATCHSIZE * sizeof(float));
 	if (cudaSuccess != rc) throw "Unable to allocate boxes frame device memory";
 }
 
 void Model::infer(cudaStream_t stream)
 {
 	void* bindings[] = { inputFrame.data, boxesFrame.data, keepCount.data };
-	bool result = _context->enqueue(1, bindings, stream, nullptr);
+	bool result = _context->enqueue(BATCHSIZE, bindings, stream, nullptr);
 	if (!result) throw "Unable to enqueue inference";
 
 }
