@@ -141,14 +141,17 @@ int CudaDisplay::attachShader( GLenum type, const char* path)
 	auto f = fopen(path, "rb");
 	if (!f) throw "Unable to open shader";
 
-	fseek(f, 1, SEEK_END);
+	fseek(f, 0, SEEK_END);
 	GLint size = ftell(f);
 	char *src = (char*)malloc(size + 1);
 	memset(src, 0, size + 1);
 	fseek(f, 0, SEEK_SET);	
-	int read = fread(src, size, 1, f);
-	if (read != 1) throw "Unable to read entire shader file";
-	
+	int read = fread(src, 1, size, f);
+	if (read != size) 
+	{
+		fprintf(stderr, "Shader %s read %d of %u\n", path, read, size);
+		throw "Unable to read entire shader file";
+	}
 	fclose(f);
 
 	GLuint shader = glCreateShader(type);
