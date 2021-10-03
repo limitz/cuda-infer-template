@@ -146,7 +146,8 @@ int CudaDisplay::attachShader( GLenum type, const char* path)
 	char *src = (char*)malloc(size + 1);
 	memset(src, 0, size + 1);
 	fseek(f, 0, SEEK_SET);	
-	fread(src, 1, size, f);
+	int read = fread(src, size, 1, f);
+	if (read != 1) throw "Unable to read entire shader file";
 	
 	fclose(f);
 

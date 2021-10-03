@@ -230,7 +230,7 @@ int main(int /*argc*/, char** /*argv*/)
 		printf("Loading \"%s\"\n", jpegPath);
 		
 		JpegCodec codec;
-		codec.prepare(WIDTH, HEIGHT, 3);
+		codec.prepare(WIDTH, HEIGHT, 3, 90);
 		{
 			cudaMalloc(&imageBuffer, WIDTH * HEIGHT * 3);
 			

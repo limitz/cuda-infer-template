@@ -89,7 +89,7 @@ void Model::load(const char* filename, const char* prototxt, const char* caffemo
 		_builder = createInferBuilder(*this);
 		if (!_builder) throw "Unable to create builder";
 
-		_network = _builder->createNetwork();
+		_network = _builder->createNetworkV2(0);
 		if (!_network) throw "Unable to create network";
 
 		_config = _builder->createBuilderConfig();
@@ -195,7 +195,7 @@ int Model::Int8Calibrator::getBatchSize() const
 }
 
 
-bool Model::Int8Calibrator::getBatch(void* bindings[], const char* names[], int nbBindings)
+bool Model::Int8Calibrator::getBatch(void* bindings[], const char* /*names*/[], int /*nbBindings*/)
 {
 	if (0 == _calibrationBatches--) return false;
 	
@@ -217,7 +217,7 @@ const void* Model::Int8Calibrator::readCalibrationCache(size_t& length)
 	void* result = malloc(length);
 	if (!result) throw "Unable to allocate entropy memory";
 
-	int read = 0;
+	size_t read = 0;
 	while (read < length)
 	{
 		rc = fread(((uint8_t*)result) + read, 1, length - read, f);
@@ -234,9 +234,9 @@ void Model::Int8Calibrator::writeCalibrationCache(const void* data, size_t lengt
 	if (!f) throw "Unable to open entropy output file";
 
 	int rc = fwrite(&length, sizeof(size_t), 1, f);
-	if (rc != 1) "Unable to write header to entropy output file";
+	if (rc != 1) throw "Unable to write header to entropy output file";
 
-	int written = 0;
+	size_t written = 0;
 	while (written < length)
 	{
 		rc = fwrite(((uint8_t*)data) + written, 1, length - written, f);
